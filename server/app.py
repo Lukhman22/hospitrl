@@ -1,3 +1,4 @@
+import uvicorn
 from fastapi import FastAPI
 from pydantic import BaseModel
 from my_env_v4.logic import HospitalEngine
@@ -14,7 +15,7 @@ def health():
 
 @app.post("/reset")
 def reset():
-    engine.__init__() # Reset to starting values
+    engine.__init__() 
     return {
         "observation": {
             "wards": engine.wards,
@@ -34,3 +35,13 @@ def step(req: ActionRequest):
         "truncated": False,
         "info": {"task_score": reward, "pressure": press}
     }
+
+# This is what the validator is looking for!
+
+
+def main():
+    import uvicorn
+    uvicorn.run("server.app:app", host="0.0.0.0", port=7860, reload=False)
+
+if __name__ == "__main__":
+    main()

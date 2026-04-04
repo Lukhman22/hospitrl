@@ -1,48 +1,35 @@
-from huggingface_hub import HfApi, login
 import os
+from huggingface_hub import HfApi
 
-HF_TOKEN = "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"
+def deploy():
+    # We pull the token from the terminal's memory (environment variable)
+    token = os.getenv("HF_TOKEN")
+    
+    if not token:
+        print("❌ ERROR: HF_TOKEN not found in terminal memory.")
+        print("Please run: export HF_TOKEN=your_token_here")
+        return
 
-try:
-    print("Attempting to login...")
-    login(token=HF_TOKEN.strip())
-    print("Login successful!")
-except Exception as e:
-    print(f"Login failed: {e}")
-    exit()
+    try:
+        api = HfApi()
+        repo_id = "lukhman22/hospitrl" 
 
-api = HfApi()
-username = "lukhman22"
-repo_id = f"{username}/hospitrl"
+        print(f"Step 1: Uploading project files to {repo_id}...")
+        
+        # Uploading without keeping the secret in the file
+        api.upload_folder(
+            folder_path=".",
+            repo_id=repo_id,
+            repo_type="space",
+            token=token,
+            ignore_patterns=["venv/*", ".git/*", "__pycache__/*"]
+        )
+        
+        print("\n✅ SUCCESS: Project deployed to Hugging Face!")
+        print(f"URL: https://huggingface.co/spaces/{repo_id}")
 
-try:
-    print(f"Creating/Checking Space: {repo_id}")
-    api.create_repo(
-        repo_id=repo_id,
-        repo_type="space",
-        space_sdk="docker",
-        private=False,
-    )
-except Exception as e:
-    print(f"Note: Repository already exists or was verified.")
+    except Exception as e:
+        print(f"\n❌ DEPLOYMENT FAILED: {e}")
 
-print("Uploading files to Hugging Face... this may take a minute.")
-try:
-    api.upload_folder(
-        folder_path=".",
-        repo_id=repo_id,
-        repo_type="space",
-        ignore_patterns=[
-            "venv/*",
-            "build/*",
-            "*.egg-info/*",
-            "__pycache__/*",
-            ".git/*",
-            "deploy.py",
-            "*.pyc",
-            ".DS_Store"
-        ]
-    )
-    print(f"SUCCESS! View your space here: https://huggingface.co/spaces/{repo_id}")
-except Exception as e:
-    print(f"Upload failed: {e}")
+if __name__ == "__main__":
+    deploy()

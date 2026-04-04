@@ -1,24 +1,17 @@
 [build-system]
-requires = ["setuptools>=61.0", "wheel"]
-build-backend = "setuptools.build_meta"
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build-meta"
 
 [project]
 name = "hospitrl"
-version = "0.1.0"
-description = "AI-driven Hospital Ward Staff Management System"
-readme = "README.md"
-requires-python = ">=3.10"
+version = "1.0.0"
 dependencies = [
     "fastapi",
     "uvicorn",
-    "requests",
-    "pydantic",
     "openai",
-    "huggingface_hub"
+    "gymnasium",
+    "openenv-core>=0.2.0"
 ]
 
 [project.scripts]
 hospitrl-server = "server.app:main"
-
-[tool.setuptools]
-packages = ["my_env_v4", "server"]
