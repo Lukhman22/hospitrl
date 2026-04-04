@@ -1,23 +1,34 @@
-name: "hospitrl"
-version: "0.1.0"
-entry_point: "my_env_v4.env:HospitRL_Env"
-description: "AI-driven Hospital Ward Staff Management System"
+# OpenEnv Specification for HospitRL
+# This file is used by Scaler and Hugging Face to evaluate your environment.
 
-server:
-  type: "python"
-  entry_point: "server.app:app"
-  run_command: "hospitrl-server"
+environment_id: "hospitrl" # The unique ID for your hospital simulation
+version: "1.0.0"            # Your project version
 
+# This section defines the 'Curriculum' for the AI agent.
 tasks:
-  - id: "ward_baseline"
-    name: "Easy: Basic Rebalancing"
-    description: "Move 1 staff to ICU and maintain stability for 5 steps"
+  # --- TASK 1: THE BASELINE ---
+  - id: "stable_wards"
+    name: "Quiet Shift"
+    description: "Maintain hospital pressure below 0.6 for 20 steps. Focus on preventing staff fatigue."
     difficulty: "easy"
-  - id: "surge_management"
-    name: "Medium: ER Surge"
-    description: "Maintain hospital pressure below 0.7 during a patient surge"
+    target_score: 0.9 # The agent needs a high score to pass this easy level.
+
+  # --- TASK 2: THE STEADY LOAD ---
+  - id: "midday_rush"
+    name: "Midday Rush"
+    description: "Keep pressure below 0.8 during a period of steady patient arrivals. Balanced staffing is key."
     difficulty: "medium"
-  - id: "critical_efficiency"
-    name: "Hard: Critical Understaffing"
-    description: "Prevent hospital collapse with minimum staff"
+    target_score: 0.8 # Allows for some minor mistakes during a busy day.
+
+  # --- TASK 3: THE CRISIS MODE ---
+  - id: "emergency_surge"
+    name: "Crisis Management"
+    description: "Survive the Step 10 surge without letting hospital pressure exceed 0.9. High stakes!"
     difficulty: "hard"
+    target_score: 0.7 # Survival is the goal here, so the passing score is slightly lower.
+
+# Metadata for the judges
+metadata:
+  domain: "Healthcare / Operations Research"
+  tags: ["hospital-management", "resource-allocation", "surge-logic"]
+  framework: "FastAPI + Docker"
