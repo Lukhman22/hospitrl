@@ -1,34 +1,26 @@
 # OpenEnv Specification for HospitRL
-# This file is used by Scaler and Hugging Face to evaluate your environment.
+environment_id: "hospitrl"
+version: "1.0.0"
 
-environment_id: "hospitrl" # The unique ID for your hospital simulation
-version: "1.0.0"            # Your project version
-
-# This section defines the 'Curriculum' for the AI agent.
 tasks:
-  # --- TASK 1: THE BASELINE ---
   - id: "stable_wards"
     name: "Quiet Shift"
-    description: "Maintain hospital pressure below 0.6 for 20 steps. Focus on preventing staff fatigue."
+    description: "Maintain hospital pressure below 0.6 for 20 steps."
     difficulty: "easy"
-    target_score: 0.9 # The agent needs a high score to pass this easy level.
+    target_score: 0.9
 
-  # --- TASK 2: THE STEADY LOAD ---
   - id: "midday_rush"
     name: "Midday Rush"
-    description: "Keep pressure below 0.8 during a period of steady patient arrivals. Balanced staffing is key."
+    description: "Keep pressure below 0.8 during steady patient arrivals."
     difficulty: "medium"
-    target_score: 0.8 # Allows for some minor mistakes during a busy day.
+    target_score: 0.8
 
-  # --- TASK 3: THE CRISIS MODE ---
   - id: "emergency_surge"
     name: "Crisis Management"
-    description: "Survive the Step 10 surge without letting hospital pressure exceed 0.9. High stakes!"
+    description: "Survive the Step 10 surge (15-25 patients) without exceeding 0.9 pressure."
     difficulty: "hard"
-    target_score: 0.7 # Survival is the goal here, so the passing score is slightly lower.
+    target_score: 0.7
 
-# Metadata for the judges
 metadata:
-  domain: "Healthcare / Operations Research"
-  tags: ["hospital-management", "resource-allocation", "surge-logic"]
-  framework: "FastAPI + Docker"
+  domain: "Healthcare"
+  tags: ["hospital-management", "surge-logic"]

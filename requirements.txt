@@ -1,6 +1,8 @@
-openai
-pydantic
 fastapi
 uvicorn
-openenv-core
-numpy
+requests
+pydantic
+openai
+huggingface_hub
+openenv
+gymnasium

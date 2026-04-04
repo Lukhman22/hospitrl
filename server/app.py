@@ -1,41 +1,36 @@
-import os
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from pydantic import BaseModel
-from my_env_v4.env import HospitRL_Env
-from my_env_v4.models import Action
+from my_env_v4.logic import HospitalEngine
 
-app = FastAPI(title="HospitRL API")
-env = HospitRL_Env()
+app = FastAPI()
+engine = HospitalEngine()
 
-class StepRequest(BaseModel):
-    action: Action
-
-@app.post("/reset")
-async def reset():
-    obs, info = env.reset()
-    return {"observation": obs, "info": info}
-
-@app.post("/step")
-async def step(req: StepRequest):
-    try:
-        obs, reward, terminated, truncated, info = env.step(req.action)
-        return {
-            "observation": obs,
-            "reward": reward,
-            "terminated": terminated,
-            "truncated": truncated,
-            "info": info
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+class ActionRequest(BaseModel):
+    action: dict
 
 @app.get("/health")
-async def health():
+def health():
     return {"status": "healthy"}
 
-def main():
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=7860)
+@app.post("/reset")
+def reset():
+    engine.__init__() # Reset to starting values
+    return {
+        "observation": {
+            "wards": engine.wards,
+            "hospital_pressure": 0.5,
+            "time_step": 0
+        },
+        "info": {}
+    }
 
-if __name__ == "__main__":
-    main()
+@app.post("/step")
+def step(req: ActionRequest):
+    wards, reward, term, press = engine.step(req.action)
+    return {
+        "observation": {"wards": wards, "hospital_pressure": press, "time_step": engine.time_step},
+        "reward": reward,
+        "terminated": term,
+        "truncated": False,
+        "info": {"task_score": reward, "pressure": press}
+    }

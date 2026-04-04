@@ -1,6 +1,7 @@
 from huggingface_hub import HfApi, login
 import os
-HF_TOKEN = os.getenv("Hhf_ecrhnbSKBJIHkXSEdhkEEAKIKTCauHZzZg") 
+
+HF_TOKEN = "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"
 
 try:
     print("Attempting to login...")

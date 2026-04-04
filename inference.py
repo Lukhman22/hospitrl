@@ -1,52 +1,51 @@
-import asyncio
 import os
 import json
+import requests
 from openai import OpenAI
-from my_env_v4.env import HospitRL_Env
-from my_env_v4.models import Action
 
-client = OpenAI(
-    base_url=os.getenv("API_BASE_URL", "https://api.openai.com/v1"),
-    api_key=os.getenv("OPENAI_API_KEY", "no-key-provided")
-)
+# Required Environment Variables (Judges will provide these)
+API_BASE_URL = os.getenv("API_BASE_URL", "https://api.openai.com/v1")
+MODEL_NAME = os.getenv("MODEL_NAME", "gpt-4")
+HF_TOKEN = os.getenv("HF_TOKEN")
+SPACE_URL = "https://lukhman22-hospitrl.hf.space"
 
-async def main():
-    env = HospitRL_Env()
-    obs, info = env.reset()
-    
-    task_name = "ward_baseline"
-    model_name = os.getenv("MODEL_NAME", "gpt-4")
-    
-    print(f"[START] task={task_name} env=hospitrl model={model_name}")
-    
-    rewards = []
-    steps_taken = 0
-    success = False
+# Initialize Mandatory OpenAI Client
+client = OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN)
 
+def run_evaluation():
+    # [START] Mandatory Log Tag
+    print(f"[START] Starting inference for task: emergency_surge")
+    
     try:
-        for step in range(1, 11):
-            steps_taken = step
+        # 1. Reset Environment
+        resp = requests.post(f"{SPACE_URL}/reset", json={})
+        obs = resp.json()["observation"]
+        
+        # 2. Run Loop (Agent testing)
+        for i in range(5):
+            # Baseline move: Shift staff from General (2) to ER (1)
+            action = {"source_ward": 2, "target_ward": 1, "staff_count": 1}
             
-            my_action = Action(
-                source_ward=1, 
-                target_ward=0, 
-                staff_count=1
-            )
+            step_resp = requests.post(f"{SPACE_URL}/step", json={"action": action})
+            data = step_resp.json()
             
-            obs, reward, done, truncated, info = env.step(my_action)
-            rewards.append(reward)
+            # [STEP] Mandatory Log Tag (Must be JSON)
+            log_payload = {
+                "step": i,
+                "action": action,
+                "reward": data["reward"],
+                "pressure": data["info"]["pressure"]
+            }
+            print(f"[STEP] {json.dumps(log_payload)}")
             
-            print(f"[STEP] step={step} action=move_staff reward={reward} done={done} error=null")
-            
-            if done or truncated:
+            if data["terminated"]:
                 break
 
-        score = sum(rewards) / len(rewards) if rewards else 0.0
-        score = max(0.0, min(1.0, score))
-        success = score >= 0.5
-
-    finally:
-        print(f"[END] success={str(success).lower()} steps={steps_taken} score={score}")
+        # [END] Mandatory Log Tag
+        print(f"[END] Inference complete. Final Reward: {data['reward']}")
+        
+    except Exception as e:
+        print(f"Error: {e}")
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    run_evaluation()

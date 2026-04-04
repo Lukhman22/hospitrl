@@ -9,13 +9,12 @@ description = "AI-driven Hospital Ward Staff Management System"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-    "gymnasium",
-    "numpy",
     "fastapi",
     "uvicorn",
+    "requests",
     "pydantic",
     "openai",
-    "openenv-core"
+    "huggingface_hub"
 ]
 
 [project.scripts]

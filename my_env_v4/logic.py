@@ -1,58 +1,53 @@
 import random
 
-class Ward:
-    def __init__(self, name, patients, staff):
-        self.name = name
-        self.patient_count = patients
-        self.staff_count = staff
-        self.fatigue = 0.1
-
-    def update(self, is_surge=False):
-        arrival = random.randint(-2, 5)
-        
-        if is_surge:
-            arrival += random.randint(10, 20)
-            
-        self.patient_count += arrival
-        self.patient_count = max(0, self.patient_count)
-        
-        if self.staff_count > 0:
-            pressure = self.patient_count / self.staff_count
-            self.fatigue += (pressure * 0.02)
-        else:
-            self.fatigue = 1.0
-            
-        self.fatigue = min(1.0, max(0.0, self.fatigue))
-
 class HospitalEngine:
     def __init__(self):
-        self.wards = {
-            "ICU": Ward("ICU", 5, 4),
-            "ER": Ward("ER", 10, 4),
-            "General": Ward("General", 20, 4)
-        }
-        self.hospital_pressure = 0.5
-        self.step_count = 0
+        # Initial State: 3 Wards, 4 staff each, some patients
+        self.wards = [
+            {"name": "ICU", "patient_count": 5, "staff_count": 4, "fatigue": 0.1},
+            {"name": "ER", "patient_count": 10, "staff_count": 4, "fatigue": 0.1},
+            {"name": "General", "patient_count": 20, "staff_count": 4, "fatigue": 0.1}
+        ]
+        self.time_step = 0
 
-    def move_staff(self, source_name, target_name, count):
-        if source_name in self.wards and target_name in self.wards:
-            actual_move = min(count, self.wards[source_name].staff_count)
-            self.wards[source_name].staff_count -= actual_move
-            self.wards[target_name].staff_count += actual_move
+    def apply_surge(self):
+        # Every 10 steps, a massive influx happens
+        if self.time_step > 0 and self.time_step % 10 == 0:
+            surge_patients = random.randint(15, 25)
+            # Surge hits the ER first
+            self.wards[1]["patient_count"] += surge_patients
+            return True
+        return False
 
-    def update(self):
-        self.step_count += 1
+    def step(self, action):
+        self.time_step += 1
         
-        is_surge = (self.step_count % 10 == 0)
+        # 1. Move Staff based on AI action
+        source = action["source_ward"]
+        target = action["target_ward"]
+        count = action["staff_count"]
         
-        total_p = 0
-        total_s = 0
-        for ward in self.wards.values():
-            ward.update(is_surge=is_surge)
-            total_p += ward.patient_count
-            total_s += ward.staff_count
+        if self.wards[source]["staff_count"] >= count:
+            self.wards[source]["staff_count"] -= count
+            self.wards[target]["staff_count"] += count
+
+        # 2. Random Patient Arrivals + Surge
+        self.apply_surge()
+        for ward in self.wards:
+            ward["patient_count"] += random.randint(-2, 5)
+            ward["patient_count"] = max(0, ward["patient_count"])
+
+        # 3. Calculate Pressure and Fatigue
+        total_p = sum(w["patient_count"] for w in self.wards)
+        total_s = sum(w["staff_count"] for w in self.wards)
+        pressure = min(1.0, total_p / (total_s * 10))
+
+        # Update Fatigue based on workload
+        for ward in self.wards:
+            workload = ward["patient_count"] / (ward["staff_count"] * 10 + 0.1)
+            ward["fatigue"] = min(1.0, ward["fatigue"] + (workload * 0.01))
+
+        reward = 1.0 - pressure
+        terminated = pressure > 0.9 # Game over if pressure is too high
         
-        if total_s > 0:
-            self.hospital_pressure = min(1.0, total_p / (total_s * 10))
-        else:
-            self.hospital_pressure = 1.0
+        return self.wards, reward, terminated, pressure
