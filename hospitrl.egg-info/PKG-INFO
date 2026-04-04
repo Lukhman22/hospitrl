@@ -1,0 +1,33 @@
+Metadata-Version: 2.4
+Name: hospitrl
+Version: 0.1.0
+Summary: AI-driven Hospital Ward Staff Management System
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+Requires-Dist: gymnasium
+Requires-Dist: numpy
+Requires-Dist: fastapi
+Requires-Dist: uvicorn
+Requires-Dist: pydantic
+Requires-Dist: openai
+Requires-Dist: openenv-core
+
+# HospitRL Environment
+
+An OpenEnv compliant reinforcement learning environment for hospital ward management.
+
+## Motivation
+This environment simulates the real-world challenge of medical staff allocation across different hospital wards (ICU, ER, General) to manage patient pressure and staff fatigue.
+
+## Observation Space
+- Wards: List of ICU, ER, and General ward states (patients, staff, fatigue).
+- Hospital Pressure: Global metric (0.0 to 1.0) indicating system strain.
+
+## Action Space
+- source_ward: Integer (0-2)
+- target_ward: Integer (0-2)
+- staff_count: Integer (Number of staff to move)
+
+## Setup
+1. pip install .
+2. hospitrl-server

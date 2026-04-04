@@ -1,0 +1,23 @@
+name: "hospitrl"
+version: "0.1.0"
+entry_point: "my_env_v4.env:HospitRL_Env"
+description: "AI-driven Hospital Ward Staff Management System"
+
+server:
+  type: "python"
+  entry_point: "server.app:app"
+  run_command: "hospitrl-server"
+
+tasks:
+  - id: "ward_baseline"
+    name: "Easy: Basic Rebalancing"
+    description: "Move 1 staff to ICU and maintain stability for 5 steps"
+    difficulty: "easy"
+  - id: "surge_management"
+    name: "Medium: ER Surge"
+    description: "Maintain hospital pressure below 0.7 during a patient surge"
+    difficulty: "medium"
+  - id: "critical_efficiency"
+    name: "Hard: Critical Understaffing"
+    description: "Prevent hospital collapse with minimum staff"
+    difficulty: "hard"
