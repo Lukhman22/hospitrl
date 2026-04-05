@@ -3,13 +3,14 @@ import json
 import requests
 from openai import OpenAI
 
-# Required Environment Variables (Judges will provide these)
-API_BASE_URL = os.getenv("API_BASE_URL", "https://api.openai.com/v1")
+# 1. Set the default to your Space's V1 endpoint
+API_BASE_URL = os.getenv("API_BASE_URL", "https://lukhman22-hospitrl.hf.space/v1")
 MODEL_NAME = os.getenv("MODEL_NAME", "gpt-4")
 HF_TOKEN = os.getenv("HF_TOKEN")
-SPACE_URL = "https://lukhman22-hospitrl.hf.space"
 
-# Initialize Mandatory OpenAI Client
+SPACE_URL = API_BASE_URL.replace("/v1", "")
+
+# 3. Initialize Client
 client = OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN)
 
 def run_evaluation():
