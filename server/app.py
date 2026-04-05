@@ -24,17 +24,38 @@ def reset():
         },
         "info": {}
     }
+from fastapi import HTTPException
 
 @app.post("/step")
 def step(req: ActionRequest):
-    wards, reward, term, press = engine.step(req.action)
-    return {
-        "observation": {"wards": wards, "hospital_pressure": press, "time_step": engine.time_step},
-        "reward": reward,
-        "terminated": term,
-        "truncated": False,
-        "info": {"task_score": reward, "pressure": press}
-    }
+    try:
+        # Attempt the logic shift
+        wards, reward, term, press = engine.step(req.action)
+        
+        return {
+            "observation": {
+                "wards": wards, 
+                "hospital_pressure": press, 
+                "time_step": engine.time_step
+            },
+            "reward": reward,
+            "terminated": term,
+            "truncated": False,
+            "info": {"task_score": reward, "pressure": press}
+        }
+        
+    except KeyError as e:
+        # Triggered if the Ward ID or Action format is wrong
+        raise HTTPException(
+            status_code=400,
+            detail=f"Clinical Registry Error: Ward ID {e} not found in the hospital database. Action aborted."
+        )
+    except Exception as e:
+        # Catch-all for any other simulation glitches
+        raise HTTPException(
+            status_code=500,
+            detail="Hospital Systems Alert: An internal resource allocation error occurred. Please re-initialize the environment."
+        )
 
 # This is what the validator is looking for!
 
