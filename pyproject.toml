@@ -5,13 +5,21 @@ build-backend = "setuptools.build-meta"
 [project]
 name = "hospitrl"
 version = "1.0.0"
+description = "Hospital Resource Allocation Environment"
 dependencies = [
     "fastapi",
     "uvicorn",
+    "requests",
+    "pydantic",
     "openai",
-    "gymnasium",
-    "openenv-core>=0.2.0"
+    "huggingface_hub",
+    "openenv",
+    "openenv-core>=0.2.0",
+    "gymnasium"
 ]
 
 [project.scripts]
-hospitrl-server = "server.app:main"
+server = "server.app:main"
+
+[tool.setuptools]
+packages = ["server", "my_env_v4"]
