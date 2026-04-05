@@ -1,5 +1,5 @@
 # OpenEnv Specification for HospitRL
-environment_id: "hospitrl"
+environment_id: "lukhman22/hospitrl"
 version: "1.0.0"
 
 tasks:
