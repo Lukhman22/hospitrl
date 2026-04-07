@@ -12,7 +12,6 @@ class HospitalEngine:
         self.task_id = "easy_balance"
         self.steps = 0
         self.history = []
-        # Initialize with a nice empty state HTML
         self.math_html = "<div style='text-align:center; color:#666; padding:20px;'>No transfers executed yet.</div>"
 
     def reset(self, task_id: str = "easy_balance"):
@@ -40,10 +39,12 @@ class HospitalEngine:
         self.steps += 1
         src, tgt, qty = action.source_ward, action.target_ward, action.staff_count
         
+        # FIXED: Corrected the variable name from 'target' to 'tgt'
         if src in self.wards and self.wards[src] >= qty:
-            before_src, before_tgt = self.wards[src], self.wards[tgt]
+            before_src, before_tgt = self.wards[src], self.wards.get(tgt, 0)
+            
             self.wards[src] -= qty
-            self.wards[target] = self.wards.get(tgt, 0) + qty # Safety for typos
+            self.wards[tgt] = self.wards.get(tgt, 0) + qty
             
             impact = 25.0 if tgt in ["Emergency Room", "Intensive Care"] else 10.0
             self.pressure = max(0.0, self.pressure - impact)
@@ -99,7 +100,6 @@ with gr.Blocks(theme=gr.themes.Default(primary_hue="red", secondary_hue="slate")
             press_gauge = gr.Number(label="System Pressure (%)", value=100)
             reward_gauge = gr.Number(label="Continuous Reward (0.0 - 1.0)", value=0.0)
             status_box = gr.HighlightedText(label="Triage Status", value=[("CRITICAL", "loss")])
-            surge_btn = gr.Button("🚨 Trigger Surge", variant="stop")
         with gr.Column(scale=2):
             ward_plot = gr.BarPlot(x="Ward", y="Staff", title="Total Staff Registry (Capacity: 100)", y_lim=[0, 100], height=300)
 
@@ -111,7 +111,6 @@ with gr.Blocks(theme=gr.themes.Default(primary_hue="red", secondary_hue="slate")
             qty_input = gr.Slider(1, 50, step=1, label="Transfer Quantity", value=10)
             move_btn = gr.Button("Confirm Transfer", variant="primary")
         with gr.Column():
-            # CHANGED: Using HTML instead of Textbox for a professional look
             gr.Markdown("#### 📊 Logic Verification")
             math_display = gr.HTML(value=engine.math_html)
 
