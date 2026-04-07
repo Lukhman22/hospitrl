@@ -1,142 +1,129 @@
 import gradio as gr
 import pandas as pd
-from fastapi import FastAPI
-from pydantic import BaseModel
-from typing import Dict
+from fastapi import FastAPI, Query
+from server.models import Action, Observation, State
 import uvicorn
 
-# --- 1. THE LOGIC ENGINE ---
+# --- 1. THE OPENENV ENGINE ---
 class HospitalEngine:
     def __init__(self):
         self.wards = {"General Ward": 50, "Emergency Room": 25, "Intensive Care": 25}
         self.pressure = 100.0
+        self.task_id = "easy_balance"
+        self.steps = 0
         self.history = []
-        self.pressure_trend = [{"Step": 0, "Stress": 100.0}]
-        self.last_move_details = "System Initialized. Status: CRITICAL."
+        self.math_log = "System Standby"
 
-    def reset(self, g_staff=50, e_staff=25, i_staff=25):
-        self.wards = {"General Ward": g_staff, "Emergency Room": e_staff, "Intensive Care": i_staff}
-        self.pressure = 100.0
-        self.history = [f"Hospital Rebooted: {sum(self.wards.values())} staff online."]
-        self.pressure_trend = [{"Step": 0, "Stress": 100.0}]
-        self.last_move_details = "System Reset to baseline."
-        return self.wards, self.pressure
+    def reset(self, task_id: str = "easy_balance"):
+        self.steps = 0
+        self.task_id = task_id
+        self.history = [f"Environment Reset: Task {task_id} initiated."]
+        
+        # 3 Mandatory Tasks (Easy -> Medium -> Hard)
+        if task_id == "easy_balance":
+            self.wards = {"General Ward": 80, "Emergency Room": 10, "Intensive Care": 10}
+            self.pressure = 70.0
+        elif task_id == "medium_surge":
+            self.wards = {"General Ward": 50, "Emergency Room": 25, "Intensive Care": 25}
+            self.pressure = 100.0
+        elif task_id == "hard_optimization":
+            self.wards = {"General Ward": 40, "Emergency Room": 30, "Intensive Care": 30}
+            self.pressure = 100.0
+        
+        return self.get_observation()
 
-    def trigger_surge(self):
-        self.pressure = min(100.0, self.pressure + 30.0)
-        self.history.insert(0, "🚨 EMERGENCY SURGE: Massive patient influx detected!")
-        self.update_trend()
-        return "Surge Processed"
+    def get_observation(self):
+        return {
+            "wards": self.wards,
+            "pressure": self.pressure,
+            "task_id": self.task_id
+        }
 
-    def move_staff(self, source, target, count):
-        if source == target: return "Error: Select different wards."
-        if self.wards[source] < count: return f"Error: Insufficient staff in {source}."
+    def step(self, action: Action):
+        self.steps += 1
+        src, tgt, qty = action.source_ward, action.target_ward, action.staff_count
         
-        before_src, before_tgt = self.wards[source], self.wards[target]
-        self.wards[source] -= count
-        self.wards[target] += count
-        
-        reduction = 25.0 if target in ["Emergency Room", "Intensive Care"] else 10.0
-        self.pressure = max(0.0, self.pressure - reduction)
-        
-        self.last_move_details = (
-            f"🔄 TRANSFER LOGIC:\n"
-            f"• {source}: {before_src} - {count} = {self.wards[source]}\n"
-            f"• {target}: {before_tgt} + {count} = {self.wards[target]}"
-        )
-        
-        self.update_trend()
-        self.history.insert(0, f"Optimized {target}. Stress reduced.")
-        return "Success"
+        # Validating Action (Conservation of Staff Logic)
+        if src in self.wards and self.wards[src] >= qty:
+            before_src = self.wards[src]
+            before_tgt = self.wards[tgt]
+            
+            self.wards[src] -= qty
+            self.wards[tgt] += qty
+            
+            # Meaningful Reward Logic: Moving to ER/ICU reduces pressure most
+            impact = 25.0 if tgt in ["Emergency Room", "Intensive Care"] else 10.0
+            self.pressure = max(0.0, self.pressure - impact)
+            
+            self.math_log = f"LOGIC: {src}({before_src}-{qty}={self.wards[src]}) | {tgt}({before_tgt}+{qty}={self.wards[tgt]})"
+            msg = f"Successfully moved {qty} staff."
+        else:
+            msg = "INVALID ACTION: Insufficient staff or invalid ward."
 
-    def update_trend(self):
-        self.pressure_trend.append({"Step": len(self.pressure_trend), "Stress": self.pressure})
+        # Reward Calculation: Normalized signal 0.0 to 1.0
+        reward = max(0.0, min(1.0, (100.0 - self.pressure) / 100.0))
+        done = self.pressure <= 5.0 or self.steps >= 10
+        
+        self.history.insert(0, f"Step {self.steps}: {msg} | Reward: {reward:.2f}")
+        return self.get_observation(), reward, done, {"info": msg}
 
 engine = HospitalEngine()
 app = FastAPI()
 
-# --- API ENDPOINTS ---
-class ActionRequest(BaseModel):
-    action: Dict
-
+# --- 2. API ENDPOINTS (OpenEnv Spec) ---
 @app.post("/reset")
-def api_reset():
-    engine.reset()
-    return {"observation": {"wards": engine.wards, "pressure": engine.pressure}}
+def reset(task_id: str = Query("easy_balance")):
+    return {"observation": engine.reset(task_id)}
 
 @app.post("/step")
-def api_step(req: ActionRequest):
-    res = engine.move_staff(req.action["source_ward"], req.action["target_ward"], req.action["staff_count"])
-    return {
-        "observation": {"wards": engine.wards, "pressure": engine.pressure},
-        "reward": 100 if res == "Success" else -50,
-        "terminated": engine.pressure <= 0,
-        "info": {"pressure": engine.pressure}
-    }
+def step(action: Action):
+    obs, rew, done, info = engine.step(action)
+    return {"observation": obs, "reward": rew, "terminated": done, "info": info}
 
-# --- 2. UI SYNC LOGIC ---
-def sync_ui(custom_msg=None):
-    df_wards = pd.DataFrame([{"Ward": k, "Staff": v} for k, v in engine.wards.items()])
-    df_trend = pd.DataFrame(engine.pressure_trend)
+@app.get("/state")
+def state():
+    return {"observation": engine.get_observation(), "steps_taken": engine.steps}
+
+# --- 3. GRADIO UI (For the Professors) ---
+def sync_ui(src, tgt, qty):
+    obs, rew, done, info = engine.step(Action(source_ward=src, target_ward=tgt, staff_count=qty))
+    df = pd.DataFrame([{"Ward": k, "Staff": v} for k, v in obs["wards"].items()])
     
-    if engine.pressure >= 70:
-        status = [("CRITICAL OVERLOAD", "loss")]
-    elif engine.pressure > 30:
-        status = [("ACTIVE SURGE", "pending")]
-    else:
-        status = [("STABLE OPERATIONS", "pro")]
+    # Status Indicator
+    if obs["pressure"] >= 70: status = [("CRITICAL", "loss")]
+    elif obs["pressure"] > 30: status = [("WARNING", "pending")]
+    else: status = [("STABLE", "pro")]
     
-    display_msg = custom_msg if custom_msg else engine.last_move_details
-    return df_wards, df_trend, engine.pressure, status, display_msg, "\n".join(engine.history)
+    return df, obs["pressure"], rew, status, engine.math_log, "\n".join(engine.history)
 
 with gr.Blocks(theme=gr.themes.Soft()) as demo:
-    gr.Markdown("# 🏥 HospitRL: Strategic Command Center")
+    gr.Markdown("# 🏥 HospitRL Command Center\n*OpenEnv Compliant Real-World Resource Management*")
     
     with gr.Row():
         with gr.Column(scale=1):
-            stress_num = gr.Number(label="System Stress (%)", value=100.0)
-            status_box = gr.HighlightedText(value=[("CRITICAL OVERLOAD", "loss")])
-            surge_btn = gr.Button("🚨 Trigger Emergency Surge", variant="stop")
-            
+            press_gauge = gr.Number(label="Hospital Pressure (%)", value=100)
+            reward_gauge = gr.Number(label="Continuous Reward (0.0 - 1.0)", value=0.0)
+            status_box = gr.HighlightedText(value=[("CRITICAL", "loss")])
         with gr.Column(scale=2):
-            ward_chart = gr.BarPlot(
-                value=pd.DataFrame([{"Ward": k, "Staff": v} for k, v in engine.wards.items()]), 
-                x="Ward", y="Staff", title="Global Staff Registry (Capacity: 100)",
-                y_lim=[0, 100]
-            )
+            ward_plot = gr.BarPlot(x="Ward", y="Staff", title="Live Staff Registry", y_lim=[0, 100])
 
     with gr.Row():
-        with gr.Column():
-            gr.Markdown("### 🕹️ Resource Controls")
-            src_drop = gr.Dropdown(choices=list(engine.wards.keys()), label="From Ward", value="General Ward")
-            tgt_drop = gr.Dropdown(choices=list(engine.wards.keys()), label="To Ward", value="Emergency Room")
-            amt_input = gr.Number(label="Staff to Reallocate", value=10, precision=0)
-            move_btn = gr.Button("Confirm Reallocation", variant="primary")
-            
-        with gr.Column():
-            math_display = gr.Textbox(label="Movement Logic Breakdown", lines=3, interactive=False)
-            trend_line = gr.LinePlot(value=pd.DataFrame(engine.pressure_trend), x="Step", y="Stress", title="Pressure Optimization Curve")
+        src_drop = gr.Dropdown(choices=["General Ward", "Emergency Room", "Intensive Care"], label="Source")
+        tgt_drop = gr.Dropdown(choices=["General Ward", "Emergency Room", "Intensive Care"], label="Target")
+        qty_input = gr.Slider(1, 50, step=1, label="Staff Count")
 
-    log_display = gr.Textbox(label="Clinical Activity Timeline", lines=3)
+    move_btn = gr.Button("Manual Reallocation", variant="primary")
+    
+    with gr.Row():
+        math_display = gr.Textbox(label="Movement Logic Breakdown", interactive=False)
+        audit_log = gr.Textbox(label="Clinical Activity Log", lines=5)
 
-    def handle_move(s, t, a):
-        result = engine.move_staff(s, t, a)
-        if result.startswith("Error"):
-            return sync_ui(custom_msg=result)
-        return sync_ui()
-
-    def handle_surge_event():
-        engine.trigger_surge()
-        return sync_ui()
-
-    move_btn.click(handle_move, [src_drop, tgt_drop, amt_input], [ward_chart, trend_line, stress_num, status_box, math_display, log_display])
-    surge_btn.click(handle_surge_event, None, [ward_chart, trend_line, stress_num, status_box, math_display, log_display])
+    move_btn.click(sync_ui, [src_drop, tgt_drop, qty_input], 
+                  [ward_plot, press_gauge, reward_gauge, status_box, math_display, audit_log])
 
 app = gr.mount_gradio_app(app, demo, path="/")
 
-# --- 3. THE MANDATORY MAIN WRAPPER (REQUIRED BY VALIDATOR) ---
 def main():
-    """Entry point for the openenv validate tool"""
     uvicorn.run(app, host="0.0.0.0", port=7860)
 
 if __name__ == "__main__":

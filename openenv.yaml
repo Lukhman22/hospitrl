@@ -1,26 +1,27 @@
-# OpenEnv Specification for HospitRL
-environment_id: "lukhman22/hospitrl"
+name: "HospitRL"
 version: "1.0.0"
+description: "A high-stakes hospital resource management simulator designed to evaluate agent performance in clinical staff reallocation during emergency surges."
+entry_point: "server.app:main"
 
+# Mandatory Task Definitions for Scaler Scrutiny
 tasks:
-  - id: "stable_wards"
-    name: "Quiet Shift"
-    description: "Maintain hospital pressure below 0.6 for 20 steps."
+  - id: "easy_balance"
+    name: "Basic Ward Balancing"
+    description: "Transfer staff from a surplus General Ward to stabilize slightly under-pressured ER/ICU units."
     difficulty: "easy"
-    target_score: 0.9
-
-  - id: "midday_rush"
-    name: "Midday Rush"
-    description: "Keep pressure below 0.8 during steady patient arrivals."
+    
+  - id: "medium_surge"
+    name: "Mid-Level Surge Response"
+    description: "Respond to a 100% initial stress level with standard staff counts. Requires multiple high-impact moves to reach stability."
     difficulty: "medium"
-    target_score: 0.8
-
-  - id: "emergency_surge"
-    name: "Crisis Management"
-    description: "Survive the Step 10 surge (15-25 patients) without exceeding 0.9 pressure."
+    
+  - id: "hard_optimization"
+    name: "Extreme Resource Scarcity"
+    description: "Manage critical 100% pressure with a lean staff baseline. Requires mathematically perfect moves to avoid total system failure."
     difficulty: "hard"
-    target_score: 0.7
 
+# Environment Metadata
 metadata:
-  domain: "Healthcare"
-  tags: ["hospital-management", "surge-logic"]
+  total_staff: 100
+  ward_types: ["General Ward", "Emergency Room", "Intensive Care"]
+  reward_range: [0.0, 1.0]
