@@ -8,7 +8,6 @@ import uvicorn
 # --- 1. THE LOGIC ENGINE ---
 class HospitalEngine:
     def __init__(self):
-        # Starting with the realistic 100-staff baseline
         self.wards = {"General Ward": 50, "Emergency Room": 25, "Intensive Care": 25}
         self.pressure = 100.0
         self.history = []
@@ -24,7 +23,6 @@ class HospitalEngine:
         return self.wards, self.pressure
 
     def trigger_surge(self):
-        # Spikes the pressure significantly for demo purposes
         self.pressure = min(100.0, self.pressure + 30.0)
         self.history.insert(0, "🚨 EMERGENCY SURGE: Massive patient influx detected!")
         self.update_trend()
@@ -34,18 +32,13 @@ class HospitalEngine:
         if source == target: return "Error: Select different wards."
         if self.wards[source] < count: return f"Error: Insufficient staff in {source}."
         
-        # Capture Math for the Breakdown Box
         before_src, before_tgt = self.wards[source], self.wards[target]
-        
-        # Execute Reallocation
         self.wards[source] -= count
         self.wards[target] += count
         
-        # High-Impact Logic (25% drop for ER/ICU, 10% for others)
         reduction = 25.0 if target in ["Emergency Room", "Intensive Care"] else 10.0
         self.pressure = max(0.0, self.pressure - reduction)
         
-        # Format the Dynamic Math Breakdown
         self.last_move_details = (
             f"🔄 TRANSFER LOGIC:\n"
             f"• {source}: {before_src} - {count} = {self.wards[source]}\n"
@@ -62,7 +55,7 @@ class HospitalEngine:
 engine = HospitalEngine()
 app = FastAPI()
 
-# --- API ENDPOINTS (For Grader) ---
+# --- API ENDPOINTS ---
 class ActionRequest(BaseModel):
     action: Dict
 
@@ -81,12 +74,11 @@ def api_step(req: ActionRequest):
         "info": {"pressure": engine.pressure}
     }
 
-# --- 2. UI SYNC LOGIC (The Safety Wrapper) ---
+# --- 2. UI SYNC LOGIC ---
 def sync_ui(custom_msg=None):
     df_wards = pd.DataFrame([{"Ward": k, "Staff": v} for k, v in engine.wards.items()])
     df_trend = pd.DataFrame(engine.pressure_trend)
     
-    # Status Triage Thresholds
     if engine.pressure >= 70:
         status = [("CRITICAL OVERLOAD", "loss")]
     elif engine.pressure > 30:
@@ -127,7 +119,6 @@ with gr.Blocks(theme=gr.themes.Soft()) as demo:
 
     log_display = gr.Textbox(label="Clinical Activity Timeline", lines=3)
 
-    # Safety Wrappers for Buttons
     def handle_move(s, t, a):
         result = engine.move_staff(s, t, a)
         if result.startswith("Error"):
@@ -143,5 +134,10 @@ with gr.Blocks(theme=gr.themes.Soft()) as demo:
 
 app = gr.mount_gradio_app(app, demo, path="/")
 
-if __name__ == "__main__":
+# --- 3. THE MANDATORY MAIN WRAPPER (REQUIRED BY VALIDATOR) ---
+def main():
+    """Entry point for the openenv validate tool"""
     uvicorn.run(app, host="0.0.0.0", port=7860)
+
+if __name__ == "__main__":
+    main()
