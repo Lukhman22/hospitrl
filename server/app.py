@@ -1,42 +1,51 @@
 import gradio as gr
 import os
-from fastapi import FastAPI, HTTPException
+import pandas as pd
+from fastapi import FastAPI
 from pydantic import BaseModel
 from typing import Dict
 import uvicorn
 
-# --- 1. THE LOGIC ENGINE (Enhanced Functionality) ---
+# --- 1. THE LOGIC ENGINE ---
 class HospitalEngine:
     def __init__(self):
         self.wards = {"General Ward": 10, "Emergency Room": 5, "Intensive Care": 8}
         self.pressure = 50
-        self.history = []
+        self.history = [] # For the log
+        self.pressure_trend = [{"Step": 0, "Stress": 50}] # For the chart
 
     def reset(self):
         self.__init__()
         return self.wards, self.pressure
 
     def move_staff(self, source, target, count):
-        if source not in self.wards or target not in self.wards:
-            return "Error: Invalid Ward ID"
+        if source == target:
+            return "Error: Source and Target wards must be different."
         if self.wards[source] < count:
-            return f"Error: Only {self.wards[source]} staff available in {source}"
+            return f"Error: Insufficient staff in {source}."
         
         self.wards[source] -= count
         self.wards[target] += count
-        # Logic: Moving staff to ER or ICU reduces pressure faster
-        reduction = 10 if target in ["Emergency Room", "Intensive Care"] else 5
+        
+        # Logic: Impact on pressure
+        reduction = 8 if target in ["Emergency Room", "Intensive Care"] else 3
         self.pressure = max(0, self.pressure - reduction)
-        self.history.append(f"Moved {count} from {source} to {target}")
-        return f"Successfully reallocated {count} staff to {target}."
+        
+        # Update Trend Data
+        new_step = len(self.pressure_trend)
+        self.pressure_trend.append({"Step": new_step, "Stress": self.pressure})
+        
+        log_entry = f"Step {new_step}: Reallocated {count} staff from {source} to {target}."
+        self.history.insert(0, log_entry)
+        return "Success"
 
 engine = HospitalEngine()
 
-# --- 2. THE API (For the Grader) ---
+# --- 2. THE API (For Scaler Grader) ---
 app = FastAPI()
 
 class ActionRequest(BaseModel):
-    action: Dict # Expecting {"source_ward": str, "target_ward": str, "staff_count": int}
+    action: Dict
 
 @app.post("/reset")
 def api_reset():
@@ -48,47 +57,69 @@ def api_step(req: ActionRequest):
     res = engine.move_staff(req.action["source_ward"], req.action["target_ward"], req.action["staff_count"])
     return {
         "observation": {"wards": engine.wards, "pressure": engine.pressure},
-        "reward": 100 if "Success" in res else -50,
+        "reward": 100 if res == "Success" else -50,
         "terminated": engine.pressure <= 0,
         "info": {"log": res, "pressure": engine.pressure}
     }
 
-# --- 3. THE "MOGUL" UI (For the Humans) ---
-with gr.Blocks(theme=gr.themes.Soft(primary_hue="cyan", secondary_hue="slate")) as demo:
-    gr.Markdown("# 🏥 HospitRL Dashboard\n*Real-time Resource & Surge Management System*")
+# --- 3. THE UI (Aesthetic & Functional) ---
+def get_plot_data():
+    # Format data for BarPlot
+    df_wards = pd.DataFrame([{"Ward": k, "Staff": v} for k, v in engine.wards.items()])
+    # Format data for LinePlot
+    df_trend = pd.DataFrame(engine.pressure_trend)
+    return df_wards, df_trend, engine.pressure, "\n".join(engine.history)
+
+with gr.Blocks(theme=gr.themes.Default(primary_hue="blue", secondary_hue="slate")) as demo:
+    gr.Markdown("# 🏥 HospitRL Dashboard: Advanced Command Center")
     
     with gr.Row():
         with gr.Column(scale=1):
-            pressure_val = gr.Number(label="Hospital Stress Level (%)", value=engine.pressure, interactive=False)
-            status_light = gr.HighlightedText(value=[("SYSTEM ONLINE", "OK")], color_map={"OK": "green"})
+            pressure_gauge = gr.Number(label="Hospital Stress Level (%)", value=50, interactive=False)
+            status_ind = gr.HighlightedText(value=[("SYSTEM ACTIVE", "OK")], color_map={"OK": "green"})
             
         with gr.Column(scale=2):
-            ward_chart = gr.JSON(label="Live Staff Registry", value=engine.wards)
+            # Replacing JSON with a proper Bar Plot for better visuals
+            ward_plot = gr.BarPlot(
+                value=pd.DataFrame([{"Ward": k, "Staff": v} for k, v in engine.wards.items()]),
+                x="Ward", y="Staff", title="Staff Registry Distribution",
+                vertical=False, width=500, height=250, tooltip=["Ward", "Staff"]
+            )
 
-    with gr.Group():
-        gr.Markdown("### 🕹️ Manual Resource Allocation")
-        with gr.Row():
-            src_drop = gr.Dropdown(choices=list(engine.wards.keys()), label="Source Ward")
-            tgt_drop = gr.Dropdown(choices=list(engine.wards.keys()), label="Target Ward")
-            amt_slide = gr.Slider(minimum=1, maximum=5, step=1, label="Staff to Reallocate")
+    with gr.Row():
+        with gr.Column():
+            gr.Markdown("### 🕹️ Action Console")
+            src_drop = gr.Dropdown(choices=list(engine.wards.keys()), label="Source Ward", value="General Ward")
+            tgt_drop = gr.Dropdown(choices=list(engine.wards.keys()), label="Target Ward", value="Emergency Room")
+            amt_slide = gr.Slider(minimum=1, maximum=5, step=1, label="Staff Count", value=1)
+            with gr.Row():
+                move_btn = gr.Button("Execute Reallocation", variant="primary")
+                reset_btn = gr.Button("Emergency Reset", variant="stop")
         
-        move_btn = gr.Button("Execute Reallocation", variant="primary")
-        reset_btn = gr.Button("Emergency System Reset", variant="stop")
-        output_msg = gr.Textbox(label="System Response")
+        with gr.Column():
+            gr.Markdown("### 📈 Stress Trend Analysis")
+            trend_plot = gr.LinePlot(
+                value=pd.DataFrame(engine.pressure_trend),
+                x="Step", y="Stress", title="Pressure Optimization Curve",
+                width=500, height=250
+            )
 
-    # Button Functionality
-    def manual_move(src, tgt, amt):
-        msg = engine.move_staff(src, tgt, amt)
-        return engine.pressure, engine.wards, msg
+    history_log = gr.Textbox(label="Clinical Activity Timeline", lines=5, placeholder="Waiting for logs...")
 
-    def manual_reset():
-        w, p = engine.reset()
-        return p, w, "System Initialized."
+    # Logic functions
+    def ui_move(src, tgt, amt):
+        res = engine.move_staff(src, tgt, amt)
+        d_ward, d_trend, press, logs = get_plot_data()
+        return d_ward, d_trend, press, logs
 
-    move_btn.click(manual_move, [src_drop, tgt_drop, amt_slide], [pressure_val, ward_chart, output_msg])
-    reset_btn.click(manual_reset, None, [pressure_val, ward_chart, output_msg])
+    def ui_reset():
+        engine.reset()
+        d_ward, d_trend, press, logs = get_plot_data()
+        return d_ward, d_trend, press, "System Reset: Values restored to baseline."
 
-# Mount Gradio to FastAPI
+    move_btn.click(ui_move, [src_drop, tgt_drop, amt_slide], [ward_plot, trend_plot, pressure_gauge, history_log])
+    reset_btn.click(ui_reset, None, [ward_plot, trend_plot, pressure_gauge, history_log])
+
 app = gr.mount_gradio_app(app, demo, path="/")
 
 if __name__ == "__main__":
