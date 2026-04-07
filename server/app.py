@@ -60,13 +60,12 @@ def api_step(req: ActionRequest):
         "info": {"log": res, "pressure": engine.pressure}
     }
 
-# --- 3. THE UI (Gradio 6.0 Compatible) ---
+# --- 3. THE UI (Ultra-Safe Mode) ---
 def get_plot_data():
     df_wards = pd.DataFrame([{"Ward": k, "Staff": v} for k, v in engine.wards.items()])
     df_trend = pd.DataFrame(engine.pressure_trend)
     return df_wards, df_trend, engine.pressure, "\n".join(engine.history)
 
-# Removed theme from constructor to avoid UserWarning
 with gr.Blocks() as demo:
     gr.Markdown("# 🏥 HospitRL Dashboard: Advanced Command Center")
     
@@ -76,11 +75,12 @@ with gr.Blocks() as demo:
             status_ind = gr.HighlightedText(value=[("SYSTEM ACTIVE", "OK")], color_map={"OK": "green"})
             
         with gr.Column(scale=2):
-            # Removed 'vertical=False' which was causing the crash
+            # SAFEST PARAMETERS ONLY: x, y, value, and title
             ward_plot = gr.BarPlot(
                 value=pd.DataFrame([{"Ward": k, "Staff": v} for k, v in engine.wards.items()]),
-                x="Ward", y="Staff", title="Staff Registry Distribution",
-                width=500, height=250, tooltip=["Ward", "Staff"]
+                x="Ward", 
+                y="Staff", 
+                title="Staff Registry Distribution"
             )
 
     with gr.Row():
@@ -95,10 +95,12 @@ with gr.Blocks() as demo:
         
         with gr.Column():
             gr.Markdown("### 📈 Stress Trend Analysis")
+            # SAFEST PARAMETERS ONLY: x, y, value, and title
             trend_plot = gr.LinePlot(
                 value=pd.DataFrame(engine.pressure_trend),
-                x="Step", y="Stress", title="Pressure Optimization Curve",
-                width=500, height=250
+                x="Step", 
+                y="Stress", 
+                title="Pressure Optimization Curve"
             )
 
     history_log = gr.Textbox(label="Clinical Activity Timeline", lines=5, placeholder="Waiting for logs...")
@@ -116,7 +118,6 @@ with gr.Blocks() as demo:
     move_btn.click(ui_move, [src_drop, tgt_drop, amt_slide], [ward_plot, trend_plot, pressure_gauge, history_log])
     reset_btn.click(ui_reset, None, [ward_plot, trend_plot, pressure_gauge, history_log])
 
-# Apply the theme here via the mount_gradio_app or launch parameters if supported
 app = gr.mount_gradio_app(app, demo, path="/")
 
 if __name__ == "__main__":
