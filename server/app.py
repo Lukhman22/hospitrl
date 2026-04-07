@@ -5,45 +5,57 @@ from pydantic import BaseModel
 from typing import Dict
 import uvicorn
 
-# --- 1. THE ADVANCED ENGINE ---
+# --- 1. THE LOGIC ENGINE ---
 class HospitalEngine:
     def __init__(self):
-        self.wards = {"General Ward": 10, "Emergency Room": 10, "Intensive Care": 10}
+        # Defaulting to a realistic 100-staff scale
+        self.wards = {"General Ward": 50, "Emergency Room": 25, "Intensive Care": 25}
         self.pressure = 100.0
         self.history = []
         self.pressure_trend = [{"Step": 0, "Stress": 100.0}]
-        self.total_moves = 0
+        self.last_move_details = "System Initialized. Total Staff: 100"
 
-    def reset(self, g_staff=10, e_staff=10, i_staff=10):
+    def reset(self, g_staff=50, e_staff=25, i_staff=25):
         self.wards = {"General Ward": g_staff, "Emergency Room": e_staff, "Intensive Care": i_staff}
         self.pressure = 100.0
-        self.history = [f"Hospital Initialized: {sum(self.wards.values())} total staff online."]
+        self.history = [f"Hospital Rebooted: {sum(self.wards.values())} staff distributed."]
         self.pressure_trend = [{"Step": 0, "Stress": 100.0}]
-        self.total_moves = 0
+        self.last_move_details = "Registry Reset."
         return self.wards, self.pressure
 
     def trigger_surge(self):
-        # The "Catchy" Feature: Randomly increase stress
-        surge_amount = 20.0
+        # Sudden influx logic
+        surge_amount = 15.0
         self.pressure = min(100.0, self.pressure + surge_amount)
-        self.history.insert(0, f"🚨 SURGE ALERT: Influx of emergency patients! Stress +{surge_amount}%")
+        self.history.insert(0, f"🚨 SURGE ALERT: Mass casualty event! Stress Level +{surge_amount}%")
         self.update_trend()
         return self.pressure
 
     def move_staff(self, source, target, count):
         if source == target: return "Error: Select different wards."
-        if self.wards[source] < count: return f"Error: Only {self.wards[source]} staff available."
+        if self.wards[source] < count: return f"Error: Insufficient staff in {source}."
         
+        # Capture "Before" state for the math breakdown
+        before_src = self.wards[source]
+        before_tgt = self.wards[target]
+        
+        # Perform Reallocation
         self.wards[source] -= count
         self.wards[target] += count
-        self.total_moves += 1
         
-        # Strategic Impact: ER and ICU moves reduce stress significantly
-        reduction = 15.0 if target in ["Emergency Room", "Intensive Care"] else 5.0
+        # Clinical Impact: ER/ICU moves drop pressure more effectively
+        reduction = 10.0 if target in ["Emergency Room", "Intensive Care"] else 4.0
         self.pressure = max(0.0, self.pressure - reduction)
         
+        # GENERATE DYNAMIC MATH BREAKDOWN
+        self.last_move_details = (
+            f"📊 REALLOCATION MATH:\n"
+            f"• {source}: {before_src} - {count} = {self.wards[source]}\n"
+            f"• {target}: {before_tgt} + {count} = {self.wards[target]}"
+        )
+        
         self.update_trend()
-        self.history.insert(0, f"Action {self.total_moves}: Moved {count} to {target}. Pressure: {self.pressure}%")
+        self.history.insert(0, f"Successfully moved {count} staff to {target}.")
         return "Success"
 
     def update_trend(self):
@@ -70,66 +82,64 @@ def api_step(req: ActionRequest):
         "info": {"pressure": engine.pressure}
     }
 
-# --- 2. THE COMMAND CENTER UI ---
+# --- 2. THE UI (Dashboard) ---
 def sync_ui():
     df_wards = pd.DataFrame([{"Ward": k, "Staff": v} for k, v in engine.wards.items()])
     df_trend = pd.DataFrame(engine.pressure_trend)
-    # Triage logic for the status indicator
-    if engine.pressure > 80: status = [("CRITICAL SURGE", "loss")]
-    elif engine.pressure > 40: status = [("WARNING: HIGH LOAD", "pending")]
-    else: status = [("STABLE", "pro")]
-    return df_wards, df_trend, engine.pressure, status, "\n".join(engine.history)
-
-with gr.Blocks() as demo:
-    gr.Markdown("# 🏥 HospitRL Command Center v2.0")
     
-    with gr.Tab("Simulation Dashboard"):
+    # Visual Triage Logic
+    if engine.pressure > 80: status = [("CRITICAL OVERLOAD", "loss")]
+    elif engine.pressure > 40: status = [("HIGH PATIENT VOLUME", "pending")]
+    else: status = [("STABLE OPS", "pro")]
+    
+    return df_wards, df_trend, engine.pressure, status, engine.last_move_details, "\n".join(engine.history)
+
+with gr.Blocks(theme=gr.themes.Default(primary_hue="blue")) as demo:
+    gr.Markdown("# 🏥 HospitRL: Strategic Emergency Management System")
+    
+    with gr.Tab("Real-Time Operations"):
         with gr.Row():
             with gr.Column(scale=1):
-                stress_display = gr.Number(label="Hospital Stress Level (%)", value=100.0)
-                status_indicator = gr.HighlightedText(value=[("CRITICAL SURGE", "loss")])
-                surge_btn = gr.Button("⚠️ Trigger Patient Surge", variant="stop")
+                stress_num = gr.Number(label="System Stress Level (%)", value=100.0)
+                status_box = gr.HighlightedText(value=[("CRITICAL OVERLOAD", "loss")])
+                surge_btn = gr.Button("🚨 Trigger Emergency Surge", variant="stop")
                 
             with gr.Column(scale=2):
-                ward_chart = gr.BarPlot(value=pd.DataFrame([{"Ward": k, "Staff": v} for k, v in engine.wards.items()]), 
-                                       x="Ward", y="Staff", title="Real-time Staff Distribution")
+                ward_chart = gr.BarPlot(
+                    value=pd.DataFrame([{"Ward": k, "Staff": v} for k, v in engine.wards.items()]), 
+                    x="Ward", y="Staff", title="Current Staff Registry (Total: 100)",
+                    y_lim=[0, 100]
+                )
 
         with gr.Row():
             with gr.Column():
-                gr.Markdown("### 🕹️ Resource Allocation")
+                gr.Markdown("### 🕹️ Resource Controls")
                 src_drop = gr.Dropdown(choices=list(engine.wards.keys()), label="From Ward", value="General Ward")
                 tgt_drop = gr.Dropdown(choices=list(engine.wards.keys()), label="To Ward", value="Emergency Room")
-                amt_input = gr.Number(label="Staff Count", value=1, precision=0)
-                move_btn = gr.Button("Execute Reallocation", variant="primary")
+                amt_input = gr.Slider(1, 50, value=5, label="Number of Staff to Move", step=1)
+                move_btn = gr.Button("Confirm Reallocation", variant="primary")
                 
             with gr.Column():
-                trend_chart = gr.LinePlot(value=pd.DataFrame(engine.pressure_trend), x="Step", y="Stress", title="Optimization Trend")
+                # DYNAMIC MATH BOX
+                math_display = gr.Textbox(label="Movement Logic Breakdown", lines=3, interactive=False)
+                trend_line = gr.LinePlot(value=pd.DataFrame(engine.pressure_trend), x="Step", y="Stress", title="Stress Optimization Trend")
 
-        activity_log = gr.Textbox(label="Clinical Activity Timeline", lines=4)
+        log_display = gr.Textbox(label="Digital Audit Trail", lines=3)
 
-    with gr.Tab("Hospital Configuration"):
-        gr.Markdown("### ⚙️ Set Initial Hospital Capacity")
-        g_init = gr.Slider(5, 50, value=10, label="General Ward Staff")
-        e_init = gr.Slider(5, 50, value=10, label="Emergency Room Staff")
-        i_init = gr.Slider(5, 50, value=10, label="Intensive Care Staff")
-        config_btn = gr.Button("Apply Configuration & Reset", variant="primary")
+    with gr.Tab("Admin Configuration"):
+        gr.Markdown("### ⚙️ Initialize Hospital Capacity")
+        g_s = gr.Number(label="General Ward Start", value=50)
+        e_s = gr.Number(label="ER Start", value=25)
+        i_s = gr.Number(label="ICU Start", value=25)
+        apply_btn = gr.Button("Apply New Baseline")
 
-    # Event Logic
-    def handle_move(src, tgt, amt):
-        engine.move_staff(src, tgt, amt)
-        return sync_ui()
-
-    def handle_reset(g, e, i):
-        engine.reset(g, e, i)
-        return sync_ui()
-
-    def handle_surge():
-        engine.trigger_surge()
-        return sync_ui()
-
-    move_btn.click(handle_move, [src_drop, tgt_drop, amt_input], [ward_chart, trend_chart, stress_display, status_indicator, activity_log])
-    config_btn.click(handle_reset, [g_init, e_init, i_init], [ward_chart, trend_chart, stress_display, status_indicator, activity_log])
-    surge_btn.click(handle_surge, None, [ward_chart, trend_chart, stress_display, status_indicator, activity_log])
+    # Wire events
+    move_btn.click(lambda s,t,a: engine.move_staff(s,t,a) or sync_ui(), 
+                  [src_drop, src_drop.choices[1] if src_drop == src_drop.choices[0] else tgt_drop, amt_input], 
+                  [ward_chart, trend_line, stress_num, status_box, math_display, log_display])
+    
+    surge_btn.click(lambda: engine.trigger_surge() or sync_ui(), None, [ward_chart, trend_line, stress_num, status_box, math_display, log_display])
+    apply_btn.click(lambda g,e,i: engine.reset(g,e,i) or sync_ui(), [g_s, e_s, i_s], [ward_chart, trend_line, stress_num, status_box, math_display, log_display])
 
 app = gr.mount_gradio_app(app, demo, path="/")
 
