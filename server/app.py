@@ -11,8 +11,8 @@ class HospitalEngine:
     def __init__(self):
         self.wards = {"General Ward": 10, "Emergency Room": 5, "Intensive Care": 8}
         self.pressure = 50
-        self.history = [] # For the log
-        self.pressure_trend = [{"Step": 0, "Stress": 50}] # For the chart
+        self.history = [] 
+        self.pressure_trend = [{"Step": 0, "Stress": 50}] 
 
     def reset(self):
         self.__init__()
@@ -27,11 +27,9 @@ class HospitalEngine:
         self.wards[source] -= count
         self.wards[target] += count
         
-        # Logic: Impact on pressure
         reduction = 8 if target in ["Emergency Room", "Intensive Care"] else 3
         self.pressure = max(0, self.pressure - reduction)
         
-        # Update Trend Data
         new_step = len(self.pressure_trend)
         self.pressure_trend.append({"Step": new_step, "Stress": self.pressure})
         
@@ -62,15 +60,14 @@ def api_step(req: ActionRequest):
         "info": {"log": res, "pressure": engine.pressure}
     }
 
-# --- 3. THE UI (Aesthetic & Functional) ---
+# --- 3. THE UI (Gradio 6.0 Compatible) ---
 def get_plot_data():
-    # Format data for BarPlot
     df_wards = pd.DataFrame([{"Ward": k, "Staff": v} for k, v in engine.wards.items()])
-    # Format data for LinePlot
     df_trend = pd.DataFrame(engine.pressure_trend)
     return df_wards, df_trend, engine.pressure, "\n".join(engine.history)
 
-with gr.Blocks(theme=gr.themes.Default(primary_hue="blue", secondary_hue="slate")) as demo:
+# Removed theme from constructor to avoid UserWarning
+with gr.Blocks() as demo:
     gr.Markdown("# 🏥 HospitRL Dashboard: Advanced Command Center")
     
     with gr.Row():
@@ -79,11 +76,11 @@ with gr.Blocks(theme=gr.themes.Default(primary_hue="blue", secondary_hue="slate"
             status_ind = gr.HighlightedText(value=[("SYSTEM ACTIVE", "OK")], color_map={"OK": "green"})
             
         with gr.Column(scale=2):
-            # Replacing JSON with a proper Bar Plot for better visuals
+            # Removed 'vertical=False' which was causing the crash
             ward_plot = gr.BarPlot(
                 value=pd.DataFrame([{"Ward": k, "Staff": v} for k, v in engine.wards.items()]),
                 x="Ward", y="Staff", title="Staff Registry Distribution",
-                vertical=False, width=500, height=250, tooltip=["Ward", "Staff"]
+                width=500, height=250, tooltip=["Ward", "Staff"]
             )
 
     with gr.Row():
@@ -106,7 +103,6 @@ with gr.Blocks(theme=gr.themes.Default(primary_hue="blue", secondary_hue="slate"
 
     history_log = gr.Textbox(label="Clinical Activity Timeline", lines=5, placeholder="Waiting for logs...")
 
-    # Logic functions
     def ui_move(src, tgt, amt):
         res = engine.move_staff(src, tgt, amt)
         d_ward, d_trend, press, logs = get_plot_data()
@@ -120,6 +116,7 @@ with gr.Blocks(theme=gr.themes.Default(primary_hue="blue", secondary_hue="slate"
     move_btn.click(ui_move, [src_drop, tgt_drop, amt_slide], [ward_plot, trend_plot, pressure_gauge, history_log])
     reset_btn.click(ui_reset, None, [ward_plot, trend_plot, pressure_gauge, history_log])
 
+# Apply the theme here via the mount_gradio_app or launch parameters if supported
 app = gr.mount_gradio_app(app, demo, path="/")
 
 if __name__ == "__main__":
