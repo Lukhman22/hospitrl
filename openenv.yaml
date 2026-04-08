@@ -1,27 +1,11 @@
 name: "HospitRL"
 version: "1.0.0"
-description: "A high-stakes hospital resource management simulator designed to evaluate agent performance in clinical staff reallocation during emergency surges."
+description: "Clinical Resource Management Simulator"
 entry_point: "server.app:main"
-
-# Mandatory Task Definitions for Scaler Scrutiny
 tasks:
   - id: "easy_balance"
-    name: "Basic Ward Balancing"
-    description: "Transfer staff from a surplus General Ward to stabilize slightly under-pressured ER/ICU units."
     difficulty: "easy"
-    
   - id: "medium_surge"
-    name: "Mid-Level Surge Response"
-    description: "Respond to a 100% initial stress level with standard staff counts. Requires multiple high-impact moves to reach stability."
     difficulty: "medium"
-    
   - id: "hard_optimization"
-    name: "Extreme Resource Scarcity"
-    description: "Manage critical 100% pressure with a lean staff baseline. Requires mathematically perfect moves to avoid total system failure."
     difficulty: "hard"
-
-# Environment Metadata
-metadata:
-  total_staff: 100
-  ward_types: ["General Ward", "Emergency Room", "Intensive Care"]
-  reward_range: [0.0, 1.0]

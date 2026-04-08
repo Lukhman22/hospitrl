@@ -1,10 +1,10 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Dict
 
 class Action(BaseModel):
-    source_ward: str
-    target_ward: str
-    staff_count: int
+    source_ward: str = Field(..., description="Source ward")
+    target_ward: str = Field(..., description="Target ward")
+    staff_count: int = Field(..., description="Count")
 
 class Observation(BaseModel):
     wards: Dict[str, int]
