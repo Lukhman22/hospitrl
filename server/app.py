@@ -1,128 +1,217 @@
-import gradio as gr
+"""
+HospitRL — FastAPI server + Gradio dashboard
+All OpenEnv-required endpoints: /reset, /step, /state, /health
+"""
+import json
 import pandas as pd
+import gradio as gr
 from fastapi import FastAPI, Query
-from server.models import Action
+from fastapi.responses import JSONResponse
 import uvicorn
 
-# CONSTANTS FOR SCALER COMPLIANCE
-def squash(v): return float(max(0.0001, min(0.9999, v)))
+from server.models import Action, StepResponse, ResetResponse
+from server.environment import HospitalEnv, TASK_CONFIGS, _squash
 
-class HospitalUltraEngine:
-    def __init__(self):
-        self.wards = {"General Ward": 50, "Emergency Room": 25, "Intensive Care": 25}
-        self.pressure = 100.0
-        self.burnout = 10.0
-        self.budget = 5000.0
-        self.steps = 0
-        self.max_steps = 10
-        self.history = []
-        self.task_id = "easy_balance"
+# --------------------------------------------------------------------------- #
+# Shared engine instance (one per process)
+# --------------------------------------------------------------------------- #
+engine = HospitalEnv()
+app = FastAPI(title="HospitRL", version="1.0.0")
 
-    def reset(self, task_id="easy_balance"):
-        self.steps = 0
-        self.task_id = task_id
-        self.budget = 5000.0
-        self.burnout = 15.0
-        if task_id == "easy_balance":
-            self.wards, self.pressure = {"General Ward": 80, "Emergency Room": 10, "Intensive Care": 10}, 70.0
-        elif task_id == "medium_surge":
-            self.wards, self.pressure = {"General Ward": 50, "Emergency Room": 25, "Intensive Care": 25}, 100.0
-        else: # hard_optimization
-            self.wards, self.pressure = {"General Ward": 40, "Emergency Room": 30, "Intensive Care": 30}, 100.0
-        return self.get_obs()
 
-    def get_obs(self):
-        return {"wards": self.wards, "pressure": self.pressure, "burnout_index": self.burnout, 
-                "remaining_budget": self.budget, "task_id": self.task_id}
+# --------------------------------------------------------------------------- #
+# OpenEnv-required REST endpoints
+# --------------------------------------------------------------------------- #
 
-    def step(self, action: Action):
-        self.steps += 1
-        src, tgt, qty = action.source_ward, action.target_ward, action.staff_count
-        
-        # LOGIC: Reallocation Costs & Impacts
-        move_cost = qty * 50  # Logistic overhead cost
-        if src in self.wards and self.wards[src] >= qty and self.budget >= move_cost:
-            self.wards[src] -= qty
-            self.wards[tgt] += qty
-            self.budget -= move_cost
-            
-            # Clinical Impact: ICU/ER moves reduce pressure but increase burnout
-            impact = 25.0 if tgt in ["Emergency Room", "Intensive Care"] else 5.0
-            self.pressure = max(0.0, self.pressure - impact)
-            self.burnout = min(100.0, self.burnout + (qty * 0.5))
-            msg = f"Operational Success: {qty} staff deployed to {tgt}."
-        else:
-            msg = "Operational Failure: Budget exceeded or insufficient staff."
+@app.get("/health")
+def health():
+    return {"status": "ok", "env": "hospitrl", "version": "1.0.0"}
 
-        # SCALER RUBRIC (4-Part Score)
-        # 1. Safety (Pressure) | 2. Logistics (Budget) | 3. Wellness (Burnout) | 4. SLA (Steps)
-        s1 = (100 - self.pressure) / 100
-        s2 = self.budget / 5000
-        s3 = (100 - self.burnout) / 100
-        s4 = (self.max_steps - self.steps) / self.max_steps
-        
-        reward = squash((s1 * 0.4) + (s2 * 0.2) + (s3 * 0.2) + (s4 * 0.2))
-        done = self.pressure <= 5.0 or self.steps >= self.max_steps or self.budget <= 0
-        
-        self.history.insert(0, f"Step {self.steps}: {msg} | Reward: {reward:.4f}")
-        return self.get_obs(), reward, done, {"info": msg}
-
-engine = HospitalUltraEngine()
-app = FastAPI()
 
 @app.post("/reset")
-def reset(task_id: str = Query("easy_balance")): return {"observation": engine.reset(task_id)}
+def reset(task_id: str = Query("easy_balance")):
+    obs = engine.reset(task_id)
+    return {"observation": obs.model_dump()}
+
 
 @app.post("/step")
 def step(action: Action):
-    obs, rew, done, info = engine.step(action)
-    return {"observation": obs, "reward": rew, "terminated": done, "info": info}
+    obs, reward, done, info = engine.step(action)
+    return {
+        "observation": obs.model_dump(),
+        "reward": reward,
+        "terminated": done,
+        "info": info,
+    }
 
-# --- PRO DASHBOARD UI ---
-with gr.Blocks(theme=gr.themes.Default(primary_hue="cyan", secondary_hue="zinc")) as demo:
-    gr.Markdown("# 🏥 **HospitRL: Global Clinical Command**")
-    
+
+@app.get("/state")
+def state():
+    return engine.state()
+
+
+@app.get("/tasks")
+def list_tasks():
+    return {
+        "tasks": [
+            {"id": tid, "difficulty": cfg_to_difficulty(tid), "description": TASK_CONFIGS[tid]["description"]}
+            for tid in TASK_CONFIGS
+        ]
+    }
+
+
+def cfg_to_difficulty(task_id: str) -> str:
+    return {"easy_balance": "easy", "medium_surge": "medium", "hard_optimization": "hard"}.get(task_id, "unknown")
+
+
+# --------------------------------------------------------------------------- #
+# Gradio dashboard
+# --------------------------------------------------------------------------- #
+
+CSS = """
+.metric-box { border-radius: 10px; padding: 12px; text-align: center; }
+"""
+
+def build_df():
+    return pd.DataFrame([{"Ward": k, "Staff": v} for k, v in engine._wards.items()])
+
+def do_reset(task_id):
+    engine.reset(task_id)
+    df = build_df()
+    return (
+        df,
+        f"{engine._pressure:.1f}%",
+        f"${engine._budget:.0f}",
+        f"{engine._burnout:.1f}%",
+        f"Step 0/{engine._max_steps}",
+        "Environment reset. Select wards and commit an action.",
+        _make_gauge_html(engine._pressure, engine._burnout, engine._budget),
+    )
+
+def do_step(src, tgt, qty):
+    if src == tgt:
+        return (
+            build_df(),
+            f"{engine._pressure:.1f}%",
+            f"${engine._budget:.0f}",
+            f"{engine._burnout:.1f}%",
+            f"Step {engine._steps}/{engine._max_steps}",
+            "Error: source and target must be different.",
+            _make_gauge_html(engine._pressure, engine._burnout, engine._budget),
+        )
+    action = Action(source_ward=src, target_ward=tgt, staff_count=int(qty))
+    obs, reward, done, info = engine.step(action)
+    df = build_df()
+    status = f"Reward: {reward:.4f} | {'DONE' if done else f'Step {engine._steps}/{engine._max_steps}'}"
+    if info.get("error"):
+        log = f"Action failed: {info['error']}"
+    elif info.get("surged"):
+        log = f"SURGE EVENT at step {engine._steps}! Pressure spiked. Reward: {reward:.4f}"
+    else:
+        log = f"Moved {int(qty)} staff {src} → {tgt}. Reward: {reward:.4f}"
+    if done:
+        log += " | Episode complete. Reset to start a new episode."
+    return (
+        df,
+        f"{obs.pressure:.1f}%",
+        f"${obs.remaining_budget:.0f}",
+        f"{obs.burnout_index:.1f}%",
+        status,
+        log,
+        _make_gauge_html(obs.pressure, obs.burnout_index, obs.remaining_budget),
+    )
+
+def _make_gauge_html(pressure, burnout, budget):
+    def bar(val, max_val, color, label):
+        pct = min(100, val / max_val * 100)
+        return f"""
+        <div style='margin-bottom:10px'>
+          <div style='display:flex;justify-content:space-between;font-size:13px;margin-bottom:3px'>
+            <span>{label}</span><span>{val:.1f}</span>
+          </div>
+          <div style='background:#e5e7eb;border-radius:6px;height:10px'>
+            <div style='background:{color};width:{pct:.1f}%;height:10px;border-radius:6px;transition:width 0.4s'></div>
+          </div>
+        </div>"""
+    return f"""<div style='font-family:sans-serif;padding:8px'>
+        {bar(pressure, 100, '#ef4444', 'Pressure')}
+        {bar(burnout, 100, '#f97316', 'Burnout')}
+        {bar(5000 - budget, 5000, '#6366f1', 'Budget Used')}
+    </div>"""
+
+with gr.Blocks(title="HospitRL — Hospital RL Environment", css=CSS) as demo:
+    gr.Markdown("""
+# 🏥 HospitRL — Clinical Resource Management RL Environment
+**Scaler OpenEnv Hackathon** · Real-world hospital ward staffing optimization
+> Move staff between wards to reduce patient pressure while managing budget and burnout.
+""")
+
     with gr.Row():
-        with gr.Column(scale=1):
-            gr.Label("🚨 System Pressure", value=f"{engine.pressure}%")
-            p_bar = gr.Slider(0, 100, value=100, label="Live Stress Gauge", interactive=False)
-        with gr.Column(scale=1):
-            gr.Label("💰 Operational Budget", value=f"${engine.budget}")
-            b_bar = gr.Slider(0, 5000, value=5000, label="Budget Exhaustion", interactive=False)
-        with gr.Column(scale=1):
-            gr.Label("🔥 Staff Burnout", value=f"{engine.burnout}%")
-            burn_bar = gr.Slider(0, 100, value=15, label="Burnout Index", interactive=False)
+        with gr.Column(scale=3):
+            ward_chart = gr.BarPlot(
+                value=build_df(), x="Ward", y="Staff",
+                title="Live Staff Distribution", y_lim=[0, 100], height=280,
+            )
+        with gr.Column(scale=2):
+            gauge_html = gr.HTML(value=_make_gauge_html(engine._pressure, engine._burnout, engine._budget))
+            with gr.Row():
+                pressure_lbl = gr.Label(value=f"{engine._pressure:.1f}%", label="Pressure")
+                budget_lbl   = gr.Label(value=f"${engine._budget:.0f}", label="Budget")
+                burnout_lbl  = gr.Label(value=f"{engine._burnout:.1f}%", label="Burnout")
 
     with gr.Row():
         with gr.Column(scale=2):
-            chart = gr.BarPlot(x="Ward", y="Staff", title="Real-Time Staff Distribution", y_lim=[0,100], height=300)
+            gr.Markdown("### Reallocation Console")
+            task_sel = gr.Dropdown(
+                choices=["easy_balance", "medium_surge", "hard_optimization"],
+                value="easy_balance", label="Select Task"
+            )
+            reset_btn = gr.Button("Reset Environment", variant="secondary")
+            with gr.Row():
+                src_dd = gr.Dropdown(["General Ward", "Emergency Room", "Intensive Care"], label="From Ward", value="General Ward")
+                tgt_dd = gr.Dropdown(["General Ward", "Emergency Room", "Intensive Care"], label="To Ward", value="Emergency Room")
+            qty_sl = gr.Slider(1, 30, value=10, step=1, label="Staff Count")
+            step_btn = gr.Button("Commit Action", variant="primary")
         with gr.Column(scale=1):
-            gr.Markdown("### 📋 Unified Grading Rubric")
-            gr.Markdown("""| Metric | Weight | Value |
-| :--- | :--- | :--- |
-| **Patient Safety** | 40% | Stress Reduction |
-| **Fiscal Responsibility** | 20% | Budget Retention |
-| **Staff Wellness** | 20% | Burnout Prevention |
-| **SLA Compliance** | 20% | Step Efficiency |""")
+            gr.Markdown("### Task Briefing")
+            gr.Markdown("""
+| Task | Difficulty | Goal |
+|------|-----------|------|
+| `easy_balance` | Easy | Pressure → 30% |
+| `medium_surge` | Medium | Survive midday rush |
+| `hard_optimization` | Hard | Crisis + tight budget |
+
+**Reward = 1 − pressure** weighted by budget, burnout, step efficiency.
+All scores strictly in **(0, 1)**.
+""")
 
     with gr.Row():
-        with gr.Column():
-            gr.Markdown("### 🕹️ Tactical Reallocation")
-            src = gr.Dropdown(["General Ward", "Emergency Room", "Intensive Care"], label="Source")
-            tgt = gr.Dropdown(["General Ward", "Emergency Room", "Intensive Care"], label="Target")
-            qty = gr.Number(label="Personnel Count", value=10)
-            btn = gr.Button("⚡ Commit Action", variant="primary")
-        with gr.Column():
-            gr.Markdown("### 📜 Command Audit Log")
-            log = gr.Textbox(label="System Events", lines=6)
+        step_lbl = gr.Label(value=f"Step 0/{engine._max_steps}", label="Progress")
+        event_log = gr.Textbox(label="Event Log", lines=4, value="Select a task and reset to begin.")
 
-    def update(s, t, q):
-        obs, rew, done, info = engine.step(Action(source_ward=s, target_ward=t, staff_count=q))
-        df = pd.DataFrame([{"Ward": k, "Staff": v} for k, v in obs["wards"].items()])
-        return df, obs["pressure"], obs["remaining_budget"], obs["burnout_index"], "\n".join(engine.history)
+    outputs = [ward_chart, pressure_lbl, budget_lbl, burnout_lbl, step_lbl, event_log, gauge_html]
 
-    btn.click(update, [src, tgt, qty], [chart, p_bar, b_bar, burn_bar, log])
+    reset_btn.click(do_reset, inputs=[task_sel], outputs=outputs)
+    step_btn.click(do_step, inputs=[src_dd, tgt_dd, qty_sl], outputs=outputs)
+
+    gr.Markdown("""---
+### API Endpoints
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/health` | Health check |
+| `POST` | `/reset?task_id=easy_balance` | Reset environment |
+| `POST` | `/step` | Execute action |
+| `GET` | `/state` | Full state snapshot |
+| `GET` | `/tasks` | List all tasks |
+""")
+
 
 app = gr.mount_gradio_app(app, demo, path="/")
-def main(): uvicorn.run(app, host="0.0.0.0", port=7860)
-if __name__ == "__main__": main()
+
+
+def main():
+    uvicorn.run(app, host="0.0.0.0", port=7860)
+
+
+if __name__ == "__main__":
+    main()
