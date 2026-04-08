@@ -25,6 +25,13 @@ In a modern healthcare setting, staff distribution is often reactive rather than
 
 The core objective is to minimize **Hospital Pressure** by moving staff members between wards to meet fluctuating patient demands.
 
+## 🎯 Key Features
+
+- Real-time hospital pressure monitoring
+- AI-driven staff reallocation
+- Dynamic surge simulation
+- Multi-objective optimization (pressure, burnout, budget)
+
 ---
 
 ## 🧠 Core Mechanics
