@@ -40,43 +40,34 @@ class HospitalEngine:
         self.steps += 1
         src, tgt, qty = action.source_ward, action.target_ward, action.staff_count
         
-        # Resource Logic with staff conservation check
         if src in self.wards and self.wards[src] >= qty:
             before_src, before_tgt = self.wards[src], self.wards.get(tgt, 0)
-            
             self.wards[src] -= qty
             self.wards[tgt] = self.wards.get(tgt, 0) + qty
             
             impact = 25.0 if tgt in ["Emergency Room", "Intensive Care"] else 10.0
             self.pressure = max(0.0, self.pressure - impact)
             
-            # Professional HTML Math Breakdown
             self.math_html = f"""
-            <div style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 10px; border: 1px solid #444; font-family: sans-serif;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                    <span style="color: #ff4b4b; font-weight: bold;">▼ {src}</span>
-                    <span style="font-family: monospace;">{before_src} → {self.wards[src]}</span>
-                    <span style="background: #ff4b4b22; color: #ff4b4b; padding: 2px 8px; border-radius: 4px; font-size: 0.8em;">-{qty} Staff</span>
-                </div>
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <span style="color: #00d26a; font-weight: bold;">▲ {tgt}</span>
-                    <span style="font-family: monospace;">{before_tgt} → {self.wards[tgt]}</span>
-                    <span style="background: #00d26a22; color: #00d26a; padding: 2px 8px; border-radius: 4px; font-size: 0.8em;">+{qty} Staff</span>
+            <div style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 10px; border: 1px solid #444;">
+                <div style="display: flex; justify-content: space-between;">
+                    <span style="color: #ff4b4b;">▼ {src} ({before_src}→{self.wards[src]})</span>
+                    <span style="color: #00d26a;">▲ {tgt} ({before_tgt}→{self.wards[tgt]})</span>
                 </div>
             </div>
             """
             msg = "Success"
         else:
-            self.math_html = f"<div style='color:#ff4b4b; padding:10px; border:1px solid #ff4b4b; border-radius:5px;'>⚠️ ERROR: Invalid reallocation parameters for {src}</div>"
             msg = "Invalid"
 
-        # --- BUFFERED REWARD LOGIC (Strictly between 0 and 1) ---
-        # Formula: 0.01 + (RawScore * 0.98) -> Maps [0,1] to [0.01, 0.99]
+        # --- AGGRESSIVE HARD CLIPPING ---
         raw_progress = (100.0 - self.pressure) / 100.0
-        reward = round(0.01 + (raw_progress * 0.98), 4)
+        # This formula guarantees the result is strictly between 0.0001 and 0.9999
+        reward = 0.0001 + (raw_progress * 0.9998)
+        reward = round(float(reward), 4)
         
         done = self.pressure <= 5.0 or self.steps >= 10
-        self.history.insert(0, f"Step {self.steps}: {msg} | Reward: {reward:.3f}")
+        self.history.insert(0, f"Step {self.steps}: {msg} | Reward: {reward}")
         
         return self.get_observation(), reward, done, {"info": msg}
 
