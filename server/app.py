@@ -100,18 +100,49 @@ def do_step(src, tgt, qty):
             "Error: source and target must be different.",
             _make_gauge_html(engine._pressure, engine._burnout, engine._budget),
         )
+
+    # 🔥 CAPTURE BEFORE STATE
+    before = engine._wards.copy()
+
     action = Action(source_ward=src, target_ward=tgt, staff_count=int(qty))
     obs, reward, done, info = engine.step(action)
+
     df = build_df()
+
+    # 🔥 CAPTURE AFTER STATE
+    after = engine._wards
+
+    # 🔥 COMPUTE MOVEMENT
+    movement_log = []
+    for ward in before:
+        diff = after[ward] - before[ward]
+        if diff != 0:
+            sign = "+" if diff > 0 else ""
+            movement_log.append(
+                f"{ward}: {before[ward]} → {after[ward]} ({sign}{diff})"
+            )
+
+    movement_text = "\n".join(movement_log)
+
     status = f"Reward: {reward:.4f} | {'DONE' if done else f'Step {engine._steps}/{engine._max_steps}'}"
+
     if info.get("error"):
         log = f"Action failed: {info['error']}"
     elif info.get("surged"):
-        log = f"SURGE EVENT at step {engine._steps}! Pressure spiked. Reward: {reward:.4f}"
+        log = f"SURGE EVENT at step {engine._steps}! Reward: {reward:.4f}"
     else:
-        log = f"Moved {int(qty)} staff {src} → {tgt}. Reward: {reward:.4f}"
+        log = f"""
+Moved {int(qty)} staff {src} → {tgt}
+
+📊 Movement Breakdown:
+{movement_text}
+
+Reward: {reward:.4f}
+"""
+
     if done:
-        log += " | Episode complete. Reset to start a new episode."
+        log += "\nEpisode complete. Reset to start a new episode."
+
     return (
         df,
         f"{obs.pressure:.1f}%",
