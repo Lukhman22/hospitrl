@@ -1,6 +1,7 @@
 import os, json, requests, time
 from openai import OpenAI
 
+# PROXY CONFIG
 API_BASE_URL = os.environ.get("API_BASE_URL")
 API_KEY = os.environ.get("API_KEY")
 MODEL_NAME = os.environ.get("MODEL_NAME", "gpt-4") 
@@ -11,30 +12,35 @@ client = OpenAI(base_url=API_BASE_URL, api_key=API_KEY)
 def run_task(task_id):
     print(f"[START] Task: {task_id}")
     try:
-        resp = requests.post(f"{ENV_URL}/reset?task_id={task_id}", timeout=10).json()
-        obs = resp["observation"]
-        last_reward = 0.01
-        
-        for i in range(1, 6): # 5 steps is plenty to show progress
-            response = client.chat.completions.create(
+        obs = requests.post(f"{ENV_URL}/reset?task_id={task_id}").json()["observation"]
+        cumulative_reward = 0.01
+
+        for i in range(1, 8):
+            # SYSTEM PROMPT INJECTING CORE LOGIC
+            prompt = (f"Hospital AI. Pressure: {obs['pressure']}%. Wards: {obs['wards']}. "
+                      f"Burnout: {obs['burnout_index']}%. Budget: {obs['remaining_budget']}. "
+                      "Move staff to ER/ICU to drop pressure. Output JSON: "
+                      "{'source_ward': str, 'target_ward': str, 'staff_count': int}")
+            
+            chat = client.chat.completions.create(
                 model=MODEL_NAME,
-                messages=[{"role": "system", "content": "Hospital AI: Reallocate staff. JSON only."},
-                          {"role": "user", "content": f"State: {obs}"}],
+                messages=[{"role": "system", "content": "You are a Resource Optimizer."},
+                          {"role": "user", "content": prompt}],
                 response_format={"type": "json_object"}
             )
-            action = json.loads(response.choices[0].message.content)
-            res = requests.post(f"{ENV_URL}/step", json=action, timeout=10).json()
-            obs, last_reward = res["observation"], res["reward"]
             
-            # [STEP] log
-            print(f"[STEP] {json.dumps({'step': i, 'reward': last_reward, 'pressure': obs['pressure']})}")
+            action = json.loads(chat.choices[0].message.content)
+            res = requests.post(f"{ENV_URL}/step", json=action).json()
+            obs, cumulative_reward = res["observation"], res["reward"]
+
+            print(f"[STEP] {json.dumps({'step': i, 'reward': cumulative_reward, 'pressure': obs['pressure']})}")
             if res["terminated"]: break
             time.sleep(0.1)
 
-        # MANDATORY: Final score must be strictly (0, 1)
-        final_score = float(max(0.0001, min(0.9999, last_reward)))
-        print(f"[END] Task: {task_id} | Final Score: {round(final_score, 4)}")
-        
+        # FINAL SQUASH: Strictly (0, 1)
+        final_score = round(float(max(0.0001, min(0.9999, cumulative_reward))), 4)
+        print(f"[END] Task: {task_id} | Final Score: {final_score}")
+
     except Exception as e:
         print(f"[END] Task: {task_id} | Final Score: 0.0101")
 
