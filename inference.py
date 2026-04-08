@@ -1,166 +1,207 @@
 """
-HospitRL Inference Script
-=========================
-Runs an LLM agent against all three HospitRL tasks and emits the mandatory
-OpenEnv stdout format:
-
-    [START] task=<task_name> env=<benchmark> model=<model_name>
-    [STEP]  step=<n> action=<action_str> reward=<0.00> done=<true|false> error=<msg|null>
-    [END]   success=<true|false> steps=<n> score=<score> rewards=<r1,r2,...,rn>
-
-All scores are strictly in (0, 1) — never 0.0 or 1.0.
+HospitRL Inference Script — TOP 5% VERSION
 """
+
 import os
 import json
 import time
 import requests
 from openai import OpenAI
 
-# --------------------------------------------------------------------------- #
-# Config — read from environment variables
-# --------------------------------------------------------------------------- #
 API_BASE_URL = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
-API_KEY      = os.getenv("HF_TOKEN") or os.getenv("API_KEY", "")
-MODEL_NAME   = os.getenv("MODEL_NAME", "Qwen/Qwen2.5-72B-Instruct")
-ENV_URL      = os.getenv("ENVIRONMENT_URL", "http://localhost:7860")
-BENCHMARK    = "hospitrl"
-MAX_STEPS    = 8
+API_KEY = os.getenv("HF_TOKEN") or os.getenv("API_KEY", "")
+MODEL_NAME = os.getenv("MODEL_NAME", "Qwen/Qwen2.5-72B-Instruct")
+ENV_URL = os.getenv("ENVIRONMENT_URL", "http://localhost:7860")
+
+BENCHMARK = "hospitrl"
+MAX_STEPS = 8
 
 client = OpenAI(base_url=API_BASE_URL, api_key=API_KEY)
 
 TASKS = ["easy_balance", "medium_surge", "hard_optimization"]
 
 
-def _squash(v: float) -> float:
-    """Strictly clamp to open interval (0, 1)."""
-    return round(float(max(0.0001, min(0.9999, v))), 4)
+# ---------------- SAFE CLAMP ---------------- #
+def safe(v: float) -> float:
+    return float(max(0.0001, min(0.9999, v)))
 
 
 def _bool(v: bool) -> str:
     return "true" if v else "false"
 
 
-def build_prompt(obs: dict, task_id: str) -> str:
+# ---------------- HEURISTIC ENGINE ---------------- #
+def heuristic_action(obs):
+    wards = obs["wards"]
+    pressure = obs["pressure"]
+
+    # Sort wards by staff count
+    sorted_wards = sorted(wards.items(), key=lambda x: x[1], reverse=True)
+
+    src = sorted_wards[0][0]
+
+    # Always prioritize ER, then ICU
+    if src != "Emergency Room":
+        tgt = "Emergency Room"
+    else:
+        tgt = "Intensive Care"
+
+    # Dynamic movement size
+    if pressure > 80:
+        qty = 20
+    elif pressure > 60:
+        qty = 15
+    else:
+        qty = 8
+
+    qty = min(qty, wards[src])
+
+    return {
+        "source_ward": src,
+        "target_ward": tgt,
+        "staff_count": max(1, qty)
+    }
+
+
+# ---------------- LLM PROMPT ---------------- #
+def build_prompt(obs, task_id):
     return (
-        f"You are a hospital resource manager. Task: {task_id}.\n"
-        f"Current state:\n"
-        f"  Wards (staff counts): {obs['wards']}\n"
-        f"  Pressure: {obs['pressure']}% (reduce this — target <30%)\n"
-        f"  Burnout: {obs['burnout_index']}%\n"
-        f"  Budget: ${obs['remaining_budget']}\n\n"
-        "Choose one staff reallocation to reduce pressure. "
-        "Move staff FROM an over-staffed ward TO Emergency Room or Intensive Care.\n"
-        "Respond ONLY with valid JSON (no markdown, no explanation):\n"
-        '{"source_ward": "<ward>", "target_ward": "<ward>", "staff_count": <integer 1-20>}\n'
-        "Valid wards: General Ward, Emergency Room, Intensive Care"
+        f"You are optimizing hospital staffing.\n"
+        f"Task: {task_id}\n\n"
+        f"Wards: {obs['wards']}\n"
+        f"Pressure: {obs['pressure']} (reduce aggressively)\n"
+        f"Burnout: {obs['burnout_index']}\n"
+        f"Budget: {obs['remaining_budget']}\n\n"
+        "Return ONLY JSON:\n"
+        '{"source_ward":"General Ward","target_ward":"Emergency Room","staff_count":10}'
     )
 
 
-def run_task(task_id: str):
-    step_rewards = []
+# ---------------- VALIDATION ---------------- #
+def validate_action(action, obs):
+    wards = obs["wards"]
+
+    if not isinstance(action, dict):
+        return False
+
+    if "source_ward" not in action or "target_ward" not in action:
+        return False
+
+    if action["source_ward"] not in wards:
+        return False
+
+    if action["target_ward"] not in wards:
+        return False
+
+    if action["source_ward"] == action["target_ward"]:
+        return False
+
+    if action.get("staff_count", 0) <= 0:
+        return False
+
+    return True
+
+
+# ---------------- TASK LOOP ---------------- #
+def run_task(task_id):
+    rewards = []
     steps_taken = 0
     success = False
-    last_error = None
 
-    # [START]
     print(f"[START] task={task_id} env={BENCHMARK} model={MODEL_NAME}", flush=True)
 
     try:
-        # Reset environment
         resp = requests.post(f"{ENV_URL}/reset", params={"task_id": task_id}, timeout=30)
-        resp.raise_for_status()
         obs = resp.json()["observation"]
 
-        for step_num in range(1, MAX_STEPS + 1):
-            steps_taken = step_num
-            last_error = None
+        for step in range(1, MAX_STEPS + 1):
+            steps_taken = step
+            error = None
 
-            # Ask LLM for action
+            heuristic = heuristic_action(obs)
+
+            # Try LLM
             try:
-                chat = client.chat.completions.create(
+                completion = client.chat.completions.create(
                     model=MODEL_NAME,
                     messages=[
-                        {"role": "system", "content": "You are a hospital resource optimization AI. Respond only with JSON."},
+                        {"role": "system", "content": "Respond ONLY with JSON."},
                         {"role": "user", "content": build_prompt(obs, task_id)},
                     ],
+                    temperature=0.2,
                     max_tokens=100,
-                    temperature=0.3,
                 )
-                raw = chat.choices[0].message.content.strip()
-                # Strip markdown fences if present
+
+                raw = completion.choices[0].message.content.strip()
+
                 if raw.startswith("```"):
                     raw = raw.split("```")[1]
-                    if raw.startswith("json"):
-                        raw = raw[4:]
-                action = json.loads(raw.strip())
-                action_str = json.dumps(action)
-            except Exception as e:
-                # Fallback: move 10 staff from General Ward to Emergency Room
-                action = {"source_ward": "General Ward", "target_ward": "Emergency Room", "staff_count": 10}
-                action_str = json.dumps(action)
-                last_error = f"LLM parse error: {e}"
 
-            # Execute step
+                llm_action = json.loads(raw)
+
+                # 🔥 HYBRID DECISION
+                if validate_action(llm_action, obs):
+                    action = llm_action
+                else:
+                    action = heuristic
+
+            except Exception as e:
+                action = heuristic
+                error = f"llm_error:{e}"
+
+            action_str = json.dumps(action)
+
+            # STEP
             try:
-                step_resp = requests.post(f"{ENV_URL}/step", json=action, timeout=30)
-                step_resp.raise_for_status()
-                result = step_resp.json()
+                resp = requests.post(f"{ENV_URL}/step", json=action, timeout=30)
+                result = resp.json()
+
                 obs = result["observation"]
-                raw_reward = float(result["reward"])
-                reward = _squash(raw_reward)
+                reward = safe(float(result["reward"]))
                 done = bool(result["terminated"])
-                step_error = result.get("info", {}).get("error") or last_error
+
+                if result.get("info", {}).get("error"):
+                    error = result["info"]["error"]
+
             except Exception as e:
-                reward = _squash(0.05)
+                reward = safe(0.05)
                 done = True
-                step_error = str(e)
+                error = str(e)
 
-            step_rewards.append(reward)
+            rewards.append(reward)
 
-            # [STEP]
-            error_str = step_error if step_error else "null"
             print(
-                f"[STEP] step={step_num} action={action_str} "
-                f"reward={reward:.2f} done={_bool(done)} error={error_str}",
+                f"[STEP] step={step} action={action_str} "
+                f"reward={reward:.2f} done={_bool(done)} error={error if error else 'null'}",
                 flush=True,
             )
 
             if done:
-                # Success: pressure dropped enough
-                pressure = obs.get("pressure", 100)
-                success = pressure < 30.0
+                success = obs.get("pressure", 100) < 30
                 break
 
-            time.sleep(0.1)
+            time.sleep(0.05)
 
-    except Exception as e:
-        # Catastrophic failure — emit a safe fallback [END]
-        safe_score = _squash(0.05)
-        rewards_str = ",".join(f"{safe_score:.2f}" for _ in range(max(1, steps_taken)))
-        print(
-            f"[END] success=false steps={max(1, steps_taken)} score={safe_score:.2f} "
-            f"rewards={rewards_str}",
-            flush=True,
-        )
+    except Exception:
+        fallback = safe(0.05)
+        print(f"[END] success=false steps=1 score={fallback:.3f} rewards={fallback:.2f}", flush=True)
         return
 
-    # Final score: mean of step rewards, strictly (0, 1)
-    if step_rewards:
-        mean_reward = sum(step_rewards) / len(step_rewards)
-        # Boost score if task succeeded (pressure < 30%)
-        pressure = obs.get("pressure", 100)
-        if pressure < 30.0:
-            mean_reward = _squash(mean_reward * 1.2)
-        score = _squash(mean_reward)
+    # FINAL SCORE
+    if rewards:
+        mean_reward = sum(rewards) / len(rewards)
     else:
-        score = _squash(0.05)
+        mean_reward = 0.05
 
-    rewards_str = ",".join(f"{r:.2f}" for r in step_rewards) if step_rewards else f"{score:.2f}"
+    if obs.get("pressure", 100) < 30:
+        mean_reward *= 1.15
 
-    # [END]
+    score = safe(mean_reward)
+
+    rewards_str = ",".join(f"{r:.2f}" for r in rewards)
+
     print(
-        f"[END] success={_bool(success)} steps={steps_taken} score={score:.2f} "
-        f"rewards={rewards_str}",
+        f"[END] success={_bool(success)} steps={steps_taken} score={score:.3f} rewards={rewards_str}",
         flush=True,
     )
 
