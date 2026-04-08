@@ -5,7 +5,8 @@ Implements the hospital ward management simulation.
 import random
 from typing import Dict, Tuple, Any
 
-from server.models import Action, Observation
+# --- FIXED IMPORT ---
+from .models import Action, Observation
 
 
 def _squash(v: float) -> float:

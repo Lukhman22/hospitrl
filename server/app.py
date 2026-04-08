@@ -9,8 +9,9 @@ from fastapi import FastAPI, Query
 from fastapi.responses import JSONResponse
 import uvicorn
 
-from server.models import Action, StepResponse, ResetResponse
-from server.environment import HospitalEnv, TASK_CONFIGS, _squash
+# --- FIXED IMPORTS ---
+from .models import Action, StepResponse, ResetResponse
+from .environment import HospitalEnv, TASK_CONFIGS, _squash
 
 # --------------------------------------------------------------------------- #
 # Shared engine instance (one per process)
@@ -50,7 +51,7 @@ def state():
     return engine.state()
 
 
-@app.get("/tasks")
+@app.get("/get_tasks") # Added for list_tasks functionality
 def list_tasks():
     return {
         "tasks": [
@@ -202,7 +203,7 @@ All scores strictly in **(0, 1)**.
 | `POST` | `/reset?task_id=easy_balance` | Reset environment |
 | `POST` | `/step` | Execute action |
 | `GET` | `/state` | Full state snapshot |
-| `GET` | `/tasks` | List all tasks |
+| `GET` | `/get_tasks` | List all tasks |
 """)
 
 
