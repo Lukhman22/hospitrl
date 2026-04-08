@@ -1,5 +1,5 @@
 """
-HospitRL Inference Script — TOP 5% VERSION
+HospitRL Inference Script — Staff Scheduling 
 """
 
 import os
