@@ -1,12 +1,10 @@
 """
-HospitRL — FastAPI server + Gradio dashboard (ENHANCED UI)
+HospitRL — FastAPI server + Gradio dashboard (FINAL SAFE VERSION)
 """
 
-import json
 import pandas as pd
 import gradio as gr
 from fastapi import FastAPI, Query
-from fastapi.responses import JSONResponse
 import uvicorn
 
 from .models import Action
@@ -68,15 +66,6 @@ def build_df():
     return pd.DataFrame([{"Ward": k, "Staff": v} for k, v in engine._wards.items()])
 
 
-def get_status_color(value):
-    if value > 80:
-        return "🔴"
-    elif value > 50:
-        return "🟠"
-    else:
-        return "🟢"
-
-
 def _make_gauge_html(pressure, burnout, budget):
     def bar(val, max_val, color, label):
         pct = min(100, val / max_val * 100)
@@ -108,7 +97,7 @@ def do_reset(task_id):
         f"${obs.remaining_budget:.0f}",
         f"{obs.burnout_index:.1f}%",
         f"Step 0/{engine._max_steps}",
-        "✅ Environment reset. Ready for optimization.",
+        "Environment reset. Ready.",
         _make_gauge_html(obs.pressure, obs.burnout_index, obs.remaining_budget),
     )
 
@@ -121,7 +110,7 @@ def do_step(src, tgt, qty):
             f"${engine._budget:.0f}",
             f"{engine._burnout:.1f}%",
             f"Step {engine._steps}/{engine._max_steps}",
-            "❌ Source and target must be different.",
+            "Error: source and target must differ.",
             _make_gauge_html(engine._pressure, engine._burnout, engine._budget),
         )
 
@@ -129,22 +118,21 @@ def do_step(src, tgt, qty):
     obs, reward, done, info = engine.step(action)
 
     log = f"""
-🧠 Action Executed:
-- From: {src}
-- To: {tgt}
-- Staff: {int(qty)}
+Action:
+From: {src}
+To: {tgt}
+Staff: {int(qty)}
 
-📊 Result:
-- Reward: {reward:.3f}
-- Pressure: {obs.pressure:.1f}%
-- Burnout: {obs.burnout_index:.1f}%
+Reward: {reward:.4f}
+Pressure: {obs.pressure:.1f}%
+Burnout: {obs.burnout_index:.1f}%
 """
 
     if info.get("surged"):
-        log += "\n🚨 Surge Event Occurred!"
+        log += "\nSURGE EVENT"
 
     if done:
-        log += "\n🏁 Episode Complete"
+        log += "\nEpisode complete"
 
     return (
         build_df(),
@@ -157,18 +145,19 @@ def do_step(src, tgt, qty):
     )
 
 
-# 🔥 AUTO OPTIMIZER (NEW — JUDGE WINNER)
+# 🔥 AUTO OPTIMIZE (SAFE, INTEGER ONLY)
 def auto_run(task_id):
     obs = engine.reset(task_id)
     logs = []
-    total_reward = 0
+    total_reward = 0.0
 
     for step in range(1, engine._max_steps + 1):
         wards = engine._wards
         src = max(wards, key=wards.get)
 
         tgt = "Emergency Room" if src != "Emergency Room" else "Intensive Care"
-        qty = min(10, wards[src])
+
+        qty = int(min(10, wards[src]))
 
         action = Action(source_ward=src, target_ward=tgt, staff_count=qty)
         obs, reward, done, info = engine.step(action)
@@ -176,7 +165,7 @@ def auto_run(task_id):
         total_reward += reward
 
         logs.append(
-            f"Step {step}: {src} → {tgt} ({qty}) | Reward: {reward:.3f} | Pressure: {obs.pressure:.1f}%"
+            f"Step {step}: {src} → {tgt} ({qty}) | Reward: {reward:.4f} | Pressure: {obs.pressure:.1f}%"
         )
 
         if done:
@@ -189,8 +178,8 @@ def auto_run(task_id):
         f"{obs.pressure:.1f}%",
         f"${obs.remaining_budget:.0f}",
         f"{obs.burnout_index:.1f}%",
-        f"Auto Run Complete",
-        "\n".join(logs) + f"\n\n🏆 Final Score: {avg_reward:.3f}",
+        "Auto Run Complete",
+        "\n".join(logs) + f"\n\nFinal Score: {avg_reward:.4f}",
         _make_gauge_html(obs.pressure, obs.burnout_index, obs.remaining_budget),
     )
 
@@ -202,8 +191,7 @@ def auto_run(task_id):
 with gr.Blocks(title="HospitRL Dashboard") as demo:
 
     gr.Markdown("""
-# 🏥 HospitRL — AI Hospital Operations Simulator  
-### ⚡ Real-Time Decision Intelligence Dashboard
+# HospitRL — Hospital Resource Optimization
 """)
 
     with gr.Row():
@@ -213,18 +201,25 @@ with gr.Blocks(title="HospitRL Dashboard") as demo:
     with gr.Row():
         task_sel = gr.Dropdown(
             ["easy_balance", "medium_surge", "hard_optimization"],
-            value="easy_balance",
-            label="Scenario"
+            value="easy_balance"
         )
 
-        reset_btn = gr.Button("🔄 Reset")
-        auto_btn = gr.Button("⚡ Auto Optimize", variant="primary")
+        reset_btn = gr.Button("Reset")
+        auto_btn = gr.Button("Auto Optimize")
 
     with gr.Row():
         src_dd = gr.Dropdown(["General Ward", "Emergency Room", "Intensive Care"], value="General Ward")
         tgt_dd = gr.Dropdown(["General Ward", "Emergency Room", "Intensive Care"], value="Emergency Room")
-        qty_sl = gr.Slider(1, 30, value=10)
-        step_btn = gr.Button("🚀 Execute")
+
+        qty_sl = gr.Slider(
+            minimum=1,
+            maximum=30,
+            value=10,
+            step=1,       # ✅ STRICT INTEGER
+            precision=0   # ✅ NO DECIMALS
+        )
+
+        step_btn = gr.Button("Execute")
 
     with gr.Row():
         pressure_lbl = gr.Label()
