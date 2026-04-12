@@ -125,48 +125,46 @@ def do_step(src, tgt, qty):
 
     movement_text = "\n".join(movement_log)
 
+    # 🔥 SMART REASONING BASED ON REAL STATE
+    reasons = []
 
+    gw = after.get("General Ward", 0)
+    er = after.get("Emergency Room", 0)
+    icu = after.get("Intensive Care", 0)
 
-# 🔥 SMART REASONING BASED ON REAL STATE
-reasons = []
+    # pressure-based
+    if obs.pressure > 70:
+        reasons.append("High pressure → urgent redistribution")
+    elif obs.pressure < 30:
+        reasons.append("System stabilizing")
 
-gw = after.get("General Ward", 0)
-er = after.get("Emergency Room", 0)
-icu = after.get("Intensive Care", 0)
+    # source-based logic
+    if src == "General Ward" and gw > 10:
+        reasons.append("General Ward has surplus staff")
+    elif src == "Emergency Room" and er > 10:
+        reasons.append("Emergency Room overloaded")
+    elif src == "Intensive Care" and icu > 10:
+        reasons.append("ICU redistribution needed")
 
-# pressure-based
-if obs.pressure > 70:
-    reasons.append("High pressure → urgent redistribution")
-elif obs.pressure < 30:
-    reasons.append("System stabilizing")
+    # target-based logic
+    if tgt == "Emergency Room":
+        reasons.append("Emergency Room prioritized")
+    elif tgt == "Intensive Care":
+        reasons.append("ICU prioritized")
 
-# source-based logic
-if src == "General Ward" and gw > 10:
-    reasons.append("General Ward has surplus staff")
-elif src == "Emergency Room" and er > 10:
-    reasons.append("Emergency Room overloaded")
-elif src == "Intensive Care" and icu > 10:
-    reasons.append("ICU redistribution needed")
+    # transfer size logic
+    if int(qty) >= 15:
+        reasons.append("Large transfer for faster impact")
 
-# target-based logic
-if tgt == "Emergency Room":
-    reasons.append("Emergency Room prioritized")
-elif tgt == "Intensive Care":
-    reasons.append("ICU prioritized")
+    reason_text = " | ".join(reasons) if reasons else "Balanced redistribution"
 
-# transfer size logic
-if int(qty) >= 15:
-    reasons.append("Large transfer for faster impact")
-
-reason_text = " | ".join(reasons) if reasons else "Balanced redistribution"
-
- # 🔥 FINAL LOG (ENHANCED)
-if info.get("error"):
+    # 🔥 FINAL LOG (ENHANCED)
+    if info.get("error"):
         log = f"Action failed: {info['error']}"
-elif info.get("surged"):
+    elif info.get("surged"):
         log = f"SURGE EVENT at step {engine._steps}! Reward: {reward:.4f}"
-else:
-    log = f"""
+    else:
+        log = f"""
 ### 🎯 Action
 {src} → {tgt} ({int(qty)} staff)
 
@@ -187,11 +185,13 @@ else:
 ### 🧠 Reasoning
 {reason_text}
 """
-if done:
-    log += "\n\n🏁 Episode complete. Reset to start a new episode."
+
+    if done:
+        log += "\n\n🏁 Episode complete. Reset to start a new episode."
 
     status = f"Reward: {reward:.4f} | {'DONE' if done else f'Step {engine._steps}/{engine._max_steps}'}"
-return (
+
+    return (
         df,
         f"{obs.pressure:.1f}%",
         f"${obs.remaining_budget:.0f}",
@@ -200,7 +200,6 @@ return (
         log,
         _make_gauge_html(obs.pressure, obs.burnout_index, obs.remaining_budget),
     )
-
 def _make_gauge_html(pressure, burnout, budget):
     def bar(val, max_val, color, label):
         pct = min(100, val / max_val * 100)
