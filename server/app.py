@@ -126,9 +126,6 @@ def do_step(src, tgt, qty):
     movement_text = "\n".join(movement_log)
 
 
-Mohammed Lukhman <lukhman2210@gmail.com>
-22:08 (0 minutes ago)
-to me
 
 # 🔥 SMART REASONING BASED ON REAL STATE
 reasons = []
