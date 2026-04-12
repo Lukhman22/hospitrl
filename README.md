@@ -55,7 +55,7 @@ Where $P$ is a normalized value ($0.0$ to $1.0$) representing the ratio of patie
 
 ---
 
-## 🛠 Tech Stack
+## 🛠 4.Tech Stack
 
 * **Logic:** Python 3.10+ / Gymnasium
 * **API Framework:** FastAPI (Uvicorn)
@@ -65,7 +65,7 @@ Where $P$ is a normalized value ($0.0$ to $1.0$) representing the ratio of patie
 
 ---
 
-## 📊 Task Curriculum
+## 📊 5.Task Curriculum
 
 We have defined three distinct tasks in `openenv.yaml` to evaluate agent performance:
 
@@ -77,17 +77,24 @@ We have defined three distinct tasks in `openenv.yaml` to evaluate agent perform
 
 ---
 
-## 💻 Technical Setup & Compliance
+## 💻 6.Technical Setup & Compliance
 
 ### Environment Endpoints
 * `GET /health`: System heartbeat.
 * `POST /reset`: Initializes the hospital state.
 * `POST /step`: Executes a staff movement action.
 
-### Local Development
+### 7.Local Development
 ```bash
 # Install dependencies
 pip install -r requirements.txt
 
 # Run the local server
 uvicorn server.app:app --host 0.0.0.0 --port 7860
+
+## 🧠 Explainable AI Decision System
+
+Each action is accompanied by:
+- movement breakdown (staff redistribution math)
+- reasoning explanation (why decision was taken)
+- impact metrics (pressure, burnout, reward)
