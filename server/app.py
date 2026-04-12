@@ -125,16 +125,38 @@ def do_step(src, tgt, qty):
 
     movement_text = "\n".join(movement_log)
 
-    # 🔥 AI REASONING
-    reasons = []
-    if obs.pressure > 70:
-        reasons.append("High pressure → urgent redistribution")
-    if src == "General Ward":
-        reasons.append("General Ward has surplus staff")
-    if tgt in ["Emergency Room", "Intensive Care"]:
-        reasons.append("Critical wards prioritized")
-    if int(qty) >= 10:
-        reasons.append("Large transfer for faster impact")
+   # 🔥 SMART REASONING BASED ON REAL STATE
+reasons = []
+
+gw = after.get("General Ward", 0)
+er = after.get("Emergency Room", 0)
+icu = after.get("Intensive Care", 0)
+
+# pressure-based
+if obs.pressure > 70:
+    reasons.append("High pressure → urgent redistribution")
+elif obs.pressure < 30:
+    reasons.append("System stabilizing")
+
+# source-based logic
+if src == "General Ward" and gw > 10:
+    reasons.append("General Ward has surplus staff")
+elif src == "Emergency Room" and er > 10:
+    reasons.append("Emergency Room overloaded")
+elif src == "Intensive Care" and icu > 10:
+    reasons.append("ICU redistribution needed")
+
+# target-based logic
+if tgt == "Emergency Room":
+    reasons.append("Emergency Room prioritized")
+elif tgt == "Intensive Care":
+    reasons.append("ICU prioritized")
+
+# transfer size logic
+if int(qty) >= 15:
+    reasons.append("Large transfer for faster impact")
+
+reason_text = " | ".join(reasons) if reasons else "Balanced redistribution"
 
     reason_text = " | ".join(reasons)
 
@@ -147,18 +169,25 @@ def do_step(src, tgt, qty):
         log = f"""
 🧠 AI Decision Summary
 
-Action:
+log = f"""
+### 🎯 Action
 {src} → {tgt} ({int(qty)} staff)
 
-📊 Movement:
-{movement_text}
+---
 
-🎯 Impact:
+### 📊 Movement
+{movement_text if movement_text else "No change"}
+
+---
+
+### 📉 Impact
 - Pressure: {obs.pressure:.1f}%
 - Burnout: {obs.burnout_index:.1f}%
 - Reward: {reward:.4f}
 
-💡 Reasoning:
+---
+
+### 🧠 Reasoning
 {reason_text}
 """
 
