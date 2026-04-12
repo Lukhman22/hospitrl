@@ -184,7 +184,7 @@ def run_task(task_id):
 
     except Exception:
         fallback = safe(0.05)
-        print(f"[END] success=false steps=1 score={fallback:.3f} rewards={fallback:.2f}", flush=True)
+        print(f"[END] success=false steps=1 rewards={fallback:.2f}", flush=True)
         return
 
     # FINAL SCORE
@@ -201,7 +201,7 @@ def run_task(task_id):
     rewards_str = ",".join(f"{r:.2f}" for r in rewards)
 
     print(
-        f"[END] success={_bool(success)} steps={steps_taken} score={score:.3f} rewards={rewards_str}",
+        f"[END] success={_bool(success)} steps={steps_taken} rewards={rewards_str}",
         flush=True,
     )
 
