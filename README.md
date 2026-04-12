@@ -8,7 +8,7 @@ app_port: 7860
 pinned: false
 ---
 
-# HospitRL: AI-Driven Hospital Resource Allocation
+# HospitRL: AI-Driven Hospital Resource/Staff Allocation
 
 **Developed for the Scaler OpenEnv Hackathon** **Team:** Mohammed Lukhmaan, Iyaad, and Hamdaan
 

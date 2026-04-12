@@ -194,7 +194,45 @@ def _make_gauge_html(pressure, burnout, budget):
         {bar(burnout, 100, '#f97316', 'Burnout')}
         {bar(5000 - budget, 5000, '#6366f1', 'Budget Used')}
     </div>"""
+CSS = """
+body { background: #0b1220; }
+.gradio-container {
+  background: linear-gradient(135deg,#0b1220,#111827);
+  color: #e5e7eb;
+}
 
+h1,h2,h3 { color:#f9fafb; }
+
+.card {
+  background:#111827;
+  border:1px solid #1f2937;
+  border-radius:14px;
+  padding:14px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+}
+
+.metric {
+  font-size:14px; opacity:0.8;
+}
+.metric-val {
+  font-size:26px; font-weight:700;
+}
+
+.log-box {
+  background:#020617;
+  border:1px solid #1f2937;
+  border-radius:12px;
+  padding:12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+button {
+  border-radius:10px !important;
+  font-weight:600 !important;
+  transition: all .15s ease-in-out !important;
+}
+button:hover { transform: translateY(-1px) scale(1.02); }
+"""
 with gr.Blocks(title="HospitRL — Hospital RL Environment", css=CSS) as demo:
     gr.Markdown("""
 # 🏥 HospitRL — Clinical Resource Management RL Environment
