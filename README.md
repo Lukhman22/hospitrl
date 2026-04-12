@@ -10,11 +10,22 @@ pinned: false
 
 # HospitRL: AI-Driven Hospital Resource/Staff Allocation
 
+## 🚀 Key Features
+
+- Real-world hospital staff scheduling simulation
+- Multi-objective optimization (pressure, burnout, budget)
+- Explainable AI decision system
+- Scenario-based evaluation (reproducible benchmarking)
+
+
 **Developed for the Scaler OpenEnv Hackathon** **Team:** Mohammed Lukhmaan, Iyaad, and Hamdaan
 
 HospitRL is a high-fidelity Reinforcement Learning (RL) environment designed to simulate real-world hospital ward management. The environment challenges AI agents to dynamic resource allocation tasks, balancing patient safety, staff fatigue, and sudden emergency surges.
 
 ---
+## 🧪 Scenario-Based Evaluation
+
+This environment supports reproducible evaluation using predefined scenarios.
 
 ## 🚀 Project Overview
 
@@ -25,14 +36,7 @@ In a modern healthcare setting, staff distribution is often reactive rather than
 
 The core objective is to minimize **Hospital Pressure** by moving staff members between wards to meet fluctuating patient demands.
 
-## 🎯 Key Features
-
-- Real-time hospital pressure monitoring
-- AI-driven staff reallocation
-- Dynamic surge simulation
-- Multi-objective optimization (pressure, burnout, budget)
-
----
+-----
 
 ## 🧠 Core Mechanics
 

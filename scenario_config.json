@@ -1,0 +1,12 @@
+{
+    "scenario_name": "hospital_surge_test",
+  
+    "user_prompt": "Reduce hospital pressure below 30% using staff allocation",
+  
+    "system_prompt": "You are an AI hospital optimizer",
+  
+    "evaluation_rules": {
+      "target_pressure": 30,
+      "max_steps": 8
+    }
+  }
