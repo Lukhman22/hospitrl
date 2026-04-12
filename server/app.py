@@ -125,6 +125,11 @@ def do_step(src, tgt, qty):
 
     movement_text = "\n".join(movement_log)
 
+
+Mohammed Lukhman <lukhman2210@gmail.com>
+22:08 (0 minutes ago)
+to me
+
 # 🔥 SMART REASONING BASED ON REAL STATE
 reasons = []
 
@@ -155,8 +160,8 @@ elif tgt == "Intensive Care":
 # transfer size logic
 if int(qty) >= 15:
     reasons.append("Large transfer for faster impact")
-
 reason_text = " | ".join(reasons) if reasons else "Balanced redistribution"
+
 
 reason_text = " | ".join(reasons)
 
