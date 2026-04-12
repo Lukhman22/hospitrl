@@ -187,13 +187,11 @@ else:
 ### 🧠 Reasoning
 {reason_text}
 """
-
-    if done:
-        log += "\n\n🏁 Episode complete. Reset to start a new episode."
+if done:
+    log += "\n\n🏁 Episode complete. Reset to start a new episode."
 
     status = f"Reward: {reward:.4f} | {'DONE' if done else f'Step {engine._steps}/{engine._max_steps}'}"
-
-    return (
+return (
         df,
         f"{obs.pressure:.1f}%",
         f"${obs.remaining_budget:.0f}",
