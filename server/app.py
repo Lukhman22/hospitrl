@@ -157,21 +157,16 @@ elif tgt == "Intensive Care":
 # transfer size logic
 if int(qty) >= 15:
     reasons.append("Large transfer for faster impact")
+
 reason_text = " | ".join(reasons) if reasons else "Balanced redistribution"
 
-
-reason_text = " | ".join(reasons)
-
-    # 🔥 FINAL LOG (ENHANCED)
-    if info.get("error"):
+ # 🔥 FINAL LOG (ENHANCED)
+if info.get("error"):
         log = f"Action failed: {info['error']}"
-    elif info.get("surged"):
+elif info.get("surged"):
         log = f"SURGE EVENT at step {engine._steps}! Reward: {reward:.4f}"
-    else:
-        log = f"""
-🧠 AI Decision Summary
-
-log = f"""
+else:
+    log = f"""
 ### 🎯 Action
 {src} → {tgt} ({int(qty)} staff)
 
