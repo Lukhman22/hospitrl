@@ -125,7 +125,7 @@ def do_step(src, tgt, qty):
 
     movement_text = "\n".join(movement_log)
 
-   # 🔥 SMART REASONING BASED ON REAL STATE
+# 🔥 SMART REASONING BASED ON REAL STATE
 reasons = []
 
 gw = after.get("General Ward", 0)
@@ -158,7 +158,7 @@ if int(qty) >= 15:
 
 reason_text = " | ".join(reasons) if reasons else "Balanced redistribution"
 
-    reason_text = " | ".join(reasons)
+reason_text = " | ".join(reasons)
 
     # 🔥 FINAL LOG (ENHANCED)
     if info.get("error"):
