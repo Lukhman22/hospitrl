@@ -1,5 +1,5 @@
 """
-HospitRL — FastAPI server + Gradio dashboard
+HospitRL — Staff Scheduling System
 All OpenEnv-required endpoints: /reset, /step, /state, /health
 """
 import json
@@ -104,6 +104,7 @@ def do_step(src, tgt, qty):
     # 🔥 CAPTURE BEFORE STATE
     before = engine._wards.copy()
 
+    # 🔥 EXECUTE ACTION (UNCHANGED LOGIC)
     action = Action(source_ward=src, target_ward=tgt, staff_count=int(qty))
     obs, reward, done, info = engine.step(action)
 
@@ -112,7 +113,7 @@ def do_step(src, tgt, qty):
     # 🔥 CAPTURE AFTER STATE
     after = engine._wards
 
-    # 🔥 COMPUTE MOVEMENT
+    # 🔥 MOVEMENT CALCULATION
     movement_log = []
     for ward in before:
         diff = after[ward] - before[ward]
@@ -124,24 +125,47 @@ def do_step(src, tgt, qty):
 
     movement_text = "\n".join(movement_log)
 
-    status = f"Reward: {reward:.4f} | {'DONE' if done else f'Step {engine._steps}/{engine._max_steps}'}"
+    # 🔥 AI REASONING
+    reasons = []
+    if obs.pressure > 70:
+        reasons.append("High pressure → urgent redistribution")
+    if src == "General Ward":
+        reasons.append("General Ward has surplus staff")
+    if tgt in ["Emergency Room", "Intensive Care"]:
+        reasons.append("Critical wards prioritized")
+    if int(qty) >= 10:
+        reasons.append("Large transfer for faster impact")
 
+    reason_text = " | ".join(reasons)
+
+    # 🔥 FINAL LOG (ENHANCED)
     if info.get("error"):
         log = f"Action failed: {info['error']}"
     elif info.get("surged"):
         log = f"SURGE EVENT at step {engine._steps}! Reward: {reward:.4f}"
     else:
         log = f"""
-Moved {int(qty)} staff {src} → {tgt}
+🧠 AI Decision Summary
 
-📊 Movement Breakdown:
+Action:
+{src} → {tgt} ({int(qty)} staff)
+
+📊 Movement:
 {movement_text}
 
-Reward: {reward:.4f}
+🎯 Impact:
+- Pressure: {obs.pressure:.1f}%
+- Burnout: {obs.burnout_index:.1f}%
+- Reward: {reward:.4f}
+
+💡 Reasoning:
+{reason_text}
 """
 
     if done:
-        log += "\nEpisode complete. Reset to start a new episode."
+        log += "\n\n🏁 Episode complete. Reset to start a new episode."
+
+    status = f"Reward: {reward:.4f} | {'DONE' if done else f'Step {engine._steps}/{engine._max_steps}'}"
 
     return (
         df,
